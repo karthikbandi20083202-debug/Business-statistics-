@@ -1,0 +1,6 @@
+{
+  "name": "KOI & CO. Business Statistical Analysis",
+  "description": "Executive introduction and decision-intelligence framework for the KOI & CO. Business Statistical Analysis System in Sainikpuri, Hyderabad.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
