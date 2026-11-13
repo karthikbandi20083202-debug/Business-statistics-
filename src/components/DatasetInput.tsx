@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { 
   Database, 
   RotateCcw, 
@@ -24,10 +24,14 @@ interface DatasetInputProps {
   variableName: string;
   onVariableNameChange: (name: string) => void;
   observationCount: number;
-  onObservationCountChange: (count: number) => void;
+  dataSource: 'custom' | 'sample';
+  customCount: number;
+  onCustomCountChange: (count: number) => void;
+  onLoadSample: () => void;
+  onSwitchToCustom: () => void;
+  onClear: () => void;
   rawInputs: string[];
   onInputChange: (index: number, value: string) => void;
-  onBulkSetInputs: (inputs: string[]) => void;
   onAnalyze: () => void;
   validationState: ValidationState | null;
   hasAnalyzed: boolean;
@@ -37,38 +41,43 @@ export function DatasetInput({
   variableName,
   onVariableNameChange,
   observationCount,
-  onObservationCountChange,
+  dataSource,
+  customCount,
+  onCustomCountChange,
+  onLoadSample,
+  onSwitchToCustom,
+  onClear,
   rawInputs,
   onInputChange,
-  onBulkSetInputs,
   onAnalyze,
   validationState,
   hasAnalyzed,
 }: DatasetInputProps) {
   const [showConfig, setShowConfig] = useState(false);
+  const [customNInput, setCustomNInput] = useState<string>(String(customCount));
+  const [nError, setNError] = useState<string | null>(null);
+
+  useEffect(() => {
+    setCustomNInput(String(customCount));
+  }, [customCount]);
 
   // Check how many fields are filled
   const filledCount = rawInputs.filter((v) => v.trim() !== '').length;
   const isComplete = filledCount === observationCount && rawInputs.every((v) => !isNaN(Number(v.trim())) && v.trim() !== '');
 
-  const handleLoadSample = () => {
-    onObservationCountChange(KOI_SAMPLE_DATA.length);
-    onBulkSetInputs(KOI_SAMPLE_DATA.map((n) => n.toString()));
-  };
-
-  const handleClear = () => {
-    onBulkSetInputs(Array(observationCount).fill(''));
-  };
-
-  const handleCountChange = (newCount: number) => {
-    if (newCount < 3 || newCount > 60) return;
-    onObservationCountChange(newCount);
-    const newInputs = Array(newCount).fill('');
-    // preserve existing where possible
-    for (let i = 0; i < Math.min(newCount, rawInputs.length); i++) {
-      newInputs[i] = rawInputs[i];
+  const applyCustomN = () => {
+    const trimmed = customNInput.trim();
+    if (!/^\d+$/.test(trimmed)) {
+      setNError('Enter a valid positive integer N (N ≥ 1).');
+      return;
     }
-    onBulkSetInputs(newInputs);
+    const parsed = parseInt(trimmed, 10);
+    if (!Number.isInteger(parsed) || parsed < 1) {
+      setNError('Sample size N must be at least 1.');
+      return;
+    }
+    setNError(null);
+    onCustomCountChange(parsed);
   };
 
   return (
@@ -98,17 +107,32 @@ export function DatasetInput({
         <div className="flex flex-wrap items-center gap-2.5">
           <button
             type="button"
-            onClick={handleLoadSample}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md bg-emerald-950/40 text-emerald-300 hover:text-emerald-200 border border-emerald-500/30 hover:border-emerald-500/50 hover:bg-emerald-900/30 transition-all cursor-pointer"
+            onClick={onLoadSample}
+            className={`inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md border transition-all cursor-pointer ${
+              dataSource === 'sample'
+                ? 'bg-emerald-900/50 text-emerald-200 border-emerald-400/60'
+                : 'bg-emerald-950/40 text-emerald-300 hover:text-emerald-200 border-emerald-500/30 hover:border-emerald-500/50 hover:bg-emerald-900/30'
+            }`}
             title="Load verified 15-observation customer footfall dataset"
           >
             <Sparkles className="w-3.5 h-3.5 text-emerald-400" />
             <span>LOAD KOI &amp; CO. SAMPLE DATA</span>
           </button>
 
+          {dataSource === 'sample' && (
+            <button
+              type="button"
+              onClick={onSwitchToCustom}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md bg-slate-900 text-slate-300 hover:text-white border border-slate-700 hover:border-slate-500 transition-colors cursor-pointer"
+              title="Switch back to your independent Custom N dataset"
+            >
+              <span>CUSTOM N ({customCount})</span>
+            </button>
+          )}
+
           <button
             type="button"
-            onClick={handleClear}
+            onClick={onClear}
             className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md bg-slate-900 text-slate-400 hover:text-slate-200 border border-slate-800 hover:border-slate-700 transition-colors cursor-pointer"
             title="Clear all fields"
           >
@@ -124,7 +148,7 @@ export function DatasetInput({
                 ? 'bg-slate-800 text-white border-slate-600' 
                 : 'bg-slate-900 text-slate-400 border-slate-800 hover:text-slate-200'
             }`}
-            title="Configure variable & sample size"
+            title="Configure variable & custom sample size N"
           >
             <Sliders className="w-3.5 h-3.5" />
             <span>Config ({observationCount})</span>
@@ -182,21 +206,56 @@ export function DatasetInput({
                 Sample Size N (Observations)
               </label>
               <div className="flex items-center gap-2">
-                {[10, 15, 20, 25].map((cnt) => (
-                  <button
-                    key={cnt}
-                    type="button"
-                    onClick={() => handleCountChange(cnt)}
-                    className={`px-2.5 py-1 rounded font-mono text-xs cursor-pointer ${
-                      observationCount === cnt
-                        ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/50'
-                        : 'bg-slate-900 text-slate-400 border border-slate-800 hover:text-white'
-                    }`}
-                  >
-                    N = {cnt}
-                  </button>
-                ))}
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  value={customNInput}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    if (/^\d*$/.test(val)) {
+                      setCustomNInput(val);
+                      if (nError) setNError(null);
+                    }
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      applyCustomN();
+                    }
+                  }}
+                  onBlur={() => {
+                    const trimmed = customNInput.trim();
+                    const parsed = parseInt(trimmed, 10);
+                    if (/^\d+$/.test(trimmed) && parsed >= 1) {
+                      if (parsed !== customCount) {
+                        onCustomCountChange(parsed);
+                      }
+                      setNError(null);
+                    } else {
+                      setCustomNInput(String(customCount));
+                      setNError(null);
+                    }
+                  }}
+                  placeholder="Enter N (e.g. 25)"
+                  aria-label="Custom Sample Size N"
+                  className="w-28 px-3 py-1.5 rounded bg-slate-900 border border-slate-700 text-white font-mono text-xs focus:outline-none focus:border-emerald-500"
+                />
+                <button
+                  type="button"
+                  onMouseDown={(e) => e.preventDefault()}
+                  onClick={applyCustomN}
+                  className="px-3 py-1.5 rounded font-mono text-xs font-semibold bg-emerald-500/20 text-emerald-300 border border-emerald-500/50 hover:bg-emerald-500/30 transition-colors cursor-pointer"
+                >
+                  Apply N
+                </button>
               </div>
+              {nError ? (
+                <p className="text-[11px] text-rose-400 font-mono mt-1">{nError}</p>
+              ) : (
+                <p className="text-[11px] text-slate-500 font-mono mt-1">
+                  Enter any positive integer N (e.g. 5, 12, 25, 50, 100)
+                </p>
+              )}
             </div>
           </div>
         </div>

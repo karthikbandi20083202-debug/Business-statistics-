@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { 
   Calculator, 
   ChevronDown, 
@@ -23,6 +23,8 @@ import { RegressionResult, PairedObservation, PairedValidationState } from '../t
 import { calculateRegression, predictY } from '../statistics/regression';
 import { validatePairedDatasetInputs, parsePairedDataset } from '../statistics/validation';
 import { formatNumber } from '../statistics/centralTendency';
+import { AnimatedNumber } from './AnimatedNumber';
+import { ScrollRevealText } from './ScrollRevealText';
 
 // Verified KOI & CO. Item-Price Sample Dataset (Old/Base Price X vs Current Price Y)
 const KOI_PRICE_SAMPLE_X = [
@@ -37,15 +39,32 @@ interface RegressionModuleProps {
 }
 
 export function RegressionModule({ onResultCalculated }: RegressionModuleProps = {}) {
-  // Input parameters
+  // Input parameters (Option A: Sample Data vs Option B: Custom N Configuration)
   const [variableXName, setVariableXName] = useState('Old/Base Price (X)');
   const [variableYName, setVariableYName] = useState('Current Price (Y)');
-  const [observationCount, setObservationCount] = useState(12);
+  const [dataSource, setDataSource] = useState<'custom' | 'sample'>('custom');
+  const [customN, setCustomN] = useState(12);
+  const [customNInput, setCustomNInput] = useState('12');
+  const [nError, setNError] = useState<string | null>(null);
   const [showConfig, setShowConfig] = useState(false);
 
-  // Raw inputs
-  const [inputsX, setInputsX] = useState<string[]>(Array(12).fill(''));
-  const [inputsY, setInputsY] = useState<string[]>(Array(12).fill(''));
+  // Separate raw inputs for Custom N and Sample Data
+  const [customInputsX, setCustomInputsX] = useState<string[]>(Array(12).fill(''));
+  const [customInputsY, setCustomInputsY] = useState<string[]>(Array(12).fill(''));
+  const [sampleInputsX, setSampleInputsX] = useState<string[]>(
+    KOI_PRICE_SAMPLE_X.map((n) => n.toString())
+  );
+  const [sampleInputsY, setSampleInputsY] = useState<string[]>(
+    KOI_PRICE_SAMPLE_Y.map((n) => n.toString())
+  );
+
+  const observationCount = dataSource === 'sample' ? sampleInputsX.length : customN;
+  const inputsX = dataSource === 'sample' ? sampleInputsX : customInputsX;
+  const inputsY = dataSource === 'sample' ? sampleInputsY : customInputsY;
+
+  useEffect(() => {
+    setCustomNInput(String(customN));
+  }, [customN]);
 
   // Validation & Result states
   const [validationState, setValidationState] = useState<PairedValidationState | null>(null);
@@ -60,9 +79,15 @@ export function RegressionModule({ onResultCalculated }: RegressionModuleProps =
 
   // Input change handlers
   const handleInputChangeX = (idx: number, val: string) => {
-    const updated = [...inputsX];
-    updated[idx] = val;
-    setInputsX(updated);
+    if (dataSource === 'sample') {
+      const updated = [...sampleInputsX];
+      updated[idx] = val;
+      setSampleInputsX(updated);
+    } else {
+      const updated = [...customInputsX];
+      updated[idx] = val;
+      setCustomInputsX(updated);
+    }
 
     if (hasAnalyzed) {
       setHasAnalyzed(false);
@@ -76,9 +101,15 @@ export function RegressionModule({ onResultCalculated }: RegressionModuleProps =
   };
 
   const handleInputChangeY = (idx: number, val: string) => {
-    const updated = [...inputsY];
-    updated[idx] = val;
-    setInputsY(updated);
+    if (dataSource === 'sample') {
+      const updated = [...sampleInputsY];
+      updated[idx] = val;
+      setSampleInputsY(updated);
+    } else {
+      const updated = [...customInputsY];
+      updated[idx] = val;
+      setCustomInputsY(updated);
+    }
 
     if (hasAnalyzed) {
       setHasAnalyzed(false);
@@ -92,16 +123,17 @@ export function RegressionModule({ onResultCalculated }: RegressionModuleProps =
   };
 
   const handleCountChange = (newCount: number) => {
-    if (newCount < 2 || newCount > 50) return;
-    setObservationCount(newCount);
+    if (!Number.isInteger(newCount) || newCount < 2) return;
+    setCustomN(newCount);
     const newX = Array(newCount).fill('');
     const newY = Array(newCount).fill('');
-    for (let i = 0; i < Math.min(newCount, inputsX.length); i++) {
-      newX[i] = inputsX[i];
-      newY[i] = inputsY[i];
+    for (let i = 0; i < Math.min(newCount, customInputsX.length); i++) {
+      newX[i] = customInputsX[i];
+      newY[i] = customInputsY[i];
     }
-    setInputsX(newX);
-    setInputsY(newY);
+    setCustomInputsX(newX);
+    setCustomInputsY(newY);
+    setDataSource('custom');
     setHasAnalyzed(false);
     setResult(null);
     setPredictedYValue(null);
@@ -109,12 +141,36 @@ export function RegressionModule({ onResultCalculated }: RegressionModuleProps =
     setValidationState(null);
   };
 
+  const applyCustomN = () => {
+    const trimmed = customNInput.trim();
+    if (!/^\d+$/.test(trimmed)) {
+      setNError('Enter a valid positive integer n (n ≥ 2).');
+      return;
+    }
+    const parsed = parseInt(trimmed, 10);
+    if (!Number.isInteger(parsed) || parsed < 2) {
+      setNError('Regression requires at least 2 observations (n ≥ 2).');
+      return;
+    }
+    setNError(null);
+    handleCountChange(parsed);
+  };
+
   const handleLoadSample = () => {
-    setObservationCount(KOI_PRICE_SAMPLE_X.length);
     setVariableXName('Old/Base Price (X)');
     setVariableYName('Current Price (Y)');
-    setInputsX(KOI_PRICE_SAMPLE_X.map((n) => n.toString()));
-    setInputsY(KOI_PRICE_SAMPLE_Y.map((n) => n.toString()));
+    setSampleInputsX(KOI_PRICE_SAMPLE_X.map((n) => n.toString()));
+    setSampleInputsY(KOI_PRICE_SAMPLE_Y.map((n) => n.toString()));
+    setDataSource('sample');
+    setHasAnalyzed(false);
+    setResult(null);
+    setPredictedYValue(null);
+    onResultCalculated?.(null);
+    setValidationState(null);
+  };
+
+  const handleSwitchToCustom = () => {
+    setDataSource('custom');
     setHasAnalyzed(false);
     setResult(null);
     setPredictedYValue(null);
@@ -123,8 +179,13 @@ export function RegressionModule({ onResultCalculated }: RegressionModuleProps =
   };
 
   const handleClear = () => {
-    setInputsX(Array(observationCount).fill(''));
-    setInputsY(Array(observationCount).fill(''));
+    if (dataSource === 'sample') {
+      setSampleInputsX(Array(sampleInputsX.length).fill(''));
+      setSampleInputsY(Array(sampleInputsY.length).fill(''));
+    } else {
+      setCustomInputsX(Array(customN).fill(''));
+      setCustomInputsY(Array(customN).fill(''));
+    }
     setHasAnalyzed(false);
     setResult(null);
     setPredictedYValue(null);
@@ -263,12 +324,27 @@ export function RegressionModule({ onResultCalculated }: RegressionModuleProps =
               <button
                 type="button"
                 onClick={handleLoadSample}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md bg-teal-950/40 text-teal-300 hover:text-teal-200 border border-teal-500/30 hover:border-teal-500/50 hover:bg-teal-900/30 transition-all cursor-pointer"
+                className={`inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md border transition-all cursor-pointer ${
+                  dataSource === 'sample'
+                    ? 'bg-teal-900/50 text-teal-200 border-teal-400/60'
+                    : 'bg-teal-950/40 text-teal-300 hover:text-teal-200 border-teal-500/30 hover:border-teal-500/50 hover:bg-teal-900/30'
+                }`}
                 title="Load verified item-price test dataset"
               >
                 <Sparkles className="w-3.5 h-3.5 text-teal-400" />
                 <span>LOAD SAMPLE DATA</span>
               </button>
+
+              {dataSource === 'sample' && (
+                <button
+                  type="button"
+                  onClick={handleSwitchToCustom}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md bg-slate-900 text-slate-300 hover:text-white border border-slate-700 hover:border-slate-500 transition-colors cursor-pointer"
+                  title="Switch back to your independent Custom N dataset"
+                >
+                  <span>CUSTOM N ({customN})</span>
+                </button>
+              )}
 
               <button
                 type="button"
@@ -288,7 +364,7 @@ export function RegressionModule({ onResultCalculated }: RegressionModuleProps =
                     ? 'bg-slate-800 text-white border-slate-600' 
                     : 'bg-slate-900 text-slate-400 border-slate-800 hover:text-slate-200'
                 }`}
-                title="Configure variables & observation count"
+                title="Configure variables & custom observation count"
               >
                 <Sliders className="w-3.5 h-3.5" />
                 <span>Config</span>
@@ -329,21 +405,56 @@ export function RegressionModule({ onResultCalculated }: RegressionModuleProps =
                     Number of Observations (n)
                   </label>
                   <div className="flex items-center gap-2">
-                    {[10, 12, 15, 20].map((cnt) => (
-                      <button
-                        key={cnt}
-                        type="button"
-                        onClick={() => handleCountChange(cnt)}
-                        className={`px-2 py-1 rounded font-mono text-xs cursor-pointer ${
-                          observationCount === cnt
-                            ? 'bg-teal-500/20 text-teal-300 border border-teal-500/50'
-                            : 'bg-slate-950 text-slate-400 border border-slate-800 hover:text-white'
-                        }`}
-                      >
-                        n = {cnt}
-                      </button>
-                    ))}
+                    <input
+                      type="text"
+                      inputMode="numeric"
+                      value={customNInput}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        if (/^\d*$/.test(val)) {
+                          setCustomNInput(val);
+                          if (nError) setNError(null);
+                        }
+                      }}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          e.preventDefault();
+                          applyCustomN();
+                        }
+                      }}
+                      onBlur={() => {
+                        const trimmed = customNInput.trim();
+                        const parsed = parseInt(trimmed, 10);
+                        if (/^\d+$/.test(trimmed) && parsed >= 2) {
+                          if (parsed !== customN) {
+                            handleCountChange(parsed);
+                          }
+                          setNError(null);
+                        } else {
+                          setCustomNInput(String(customN));
+                          setNError(null);
+                        }
+                      }}
+                      placeholder="Enter n (e.g. 25)"
+                      aria-label="Custom Number of Observations n"
+                      className="w-28 px-2.5 py-1.5 rounded bg-slate-950 border border-slate-700 text-white focus:outline-none focus:border-teal-500 font-mono text-xs"
+                    />
+                    <button
+                      type="button"
+                      onMouseDown={(e) => e.preventDefault()}
+                      onClick={applyCustomN}
+                      className="px-2.5 py-1.5 rounded font-mono text-xs font-semibold bg-teal-500/20 text-teal-300 border border-teal-500/50 hover:bg-teal-500/30 transition-colors cursor-pointer"
+                    >
+                      Apply n
+                    </button>
                   </div>
+                  {nError ? (
+                    <p className="text-[10px] text-rose-400 font-mono mt-1">{nError}</p>
+                  ) : (
+                    <p className="text-[10px] text-slate-500 font-mono mt-1">
+                      Any integer n ≥ 2 (e.g. 5, 12, 25, 50, 100)
+                    </p>
+                  )}
                 </div>
               </div>
             </div>
@@ -507,7 +618,13 @@ export function RegressionModule({ onResultCalculated }: RegressionModuleProps =
                       REGRESSION EQUATION (Y = a + bX)
                     </span>
                     <span className="font-mono text-xl sm:text-2xl font-bold text-teal-300 break-words">
-                      {result.equation}
+                      {result.errorReason ? (
+                        result.equation
+                      ) : (
+                        <>
+                          {variableYName} = <AnimatedNumber value={result.intercept} decimals={2} /> {result.slope >= 0 ? '+' : '−'} <AnimatedNumber value={Math.abs(result.slope)} decimals={4} />{variableXName}
+                        </>
+                      )}
                     </span>
                     <span className="text-[11px] text-slate-500 block mt-1">
                       Dynamically fitted least-squares line
@@ -520,7 +637,7 @@ export function RegressionModule({ onResultCalculated }: RegressionModuleProps =
                       INTERCEPT (a)
                     </span>
                     <span className="font-mono text-xl sm:text-2xl font-bold text-slate-100">
-                      a = {formatNumber(result.intercept, 2)}
+                      a = <AnimatedNumber value={result.intercept} decimals={2} />
                     </span>
                     <span className="text-[11px] text-slate-500 block mt-1">
                       Value of Y when X = 0
@@ -533,7 +650,7 @@ export function RegressionModule({ onResultCalculated }: RegressionModuleProps =
                       SLOPE (b)
                     </span>
                     <span className="font-mono text-xl sm:text-2xl font-bold text-slate-100">
-                      b = {formatNumber(result.slope, 4)}
+                      b = <AnimatedNumber value={result.slope} decimals={4} />
                     </span>
                     <span className="text-[11px] text-slate-500 block mt-1">
                       Marginal sensitivity ΔY/ΔX
@@ -549,10 +666,10 @@ export function RegressionModule({ onResultCalculated }: RegressionModuleProps =
                       R² (Coefficient of Determination)
                     </span>
                     <span className="font-mono text-2xl font-bold text-emerald-400">
-                      R² = {formatNumber(result.r2Percent, 1)}%
+                      R² = <AnimatedNumber value={result.r2Percent} decimals={1} suffix="%" />
                     </span>
                     <span className="text-[11px] font-mono text-slate-500">
-                      R² = r² = ({formatNumber(result.r, 3)})²
+                      R² = r² = (<AnimatedNumber value={result.r} decimals={3} />)²
                     </span>
                   </div>
 
@@ -561,7 +678,7 @@ export function RegressionModule({ onResultCalculated }: RegressionModuleProps =
                       Strength: {result.classification}
                     </span>
                     <p>
-                      Approximately <span className="text-emerald-300 font-semibold">{formatNumber(result.r2Percent, 1)}%</span> of the variation in {variableYName} is explained by the linear relationship with {variableXName} within this dataset.
+                      Approximately <span className="text-emerald-300 font-semibold"><AnimatedNumber value={result.r2Percent} decimals={1} suffix="%" /></span> of the variation in {variableYName} is explained by the linear relationship with {variableXName} within this dataset.
                     </p>
                   </div>
                 </div>
@@ -614,7 +731,7 @@ export function RegressionModule({ onResultCalculated }: RegressionModuleProps =
                         Predicted Y:
                       </span>
                       <span className="font-mono text-base font-bold text-teal-300">
-                        {predictedYValue !== null ? formatNumber(predictedYValue, 2) : '—'}
+                        {predictedYValue !== null ? <AnimatedNumber value={predictedYValue} decimals={2} /> : '—'}
                       </span>
                     </div>
                   </div>
@@ -640,24 +757,30 @@ export function RegressionModule({ onResultCalculated }: RegressionModuleProps =
                     <div>
                       <span className="font-mono text-xs text-slate-400 block mb-0.5">1. STATISTICAL RESULT:</span>
                       <p className="text-slate-200 leading-relaxed font-normal">
-                        Fitted equation: <span className="font-mono text-teal-300">{result.equation}</span> with R² = <span className="font-mono text-emerald-400">{formatNumber(result.r2Percent, 1)}%</span> ({result.classification} fit).
+                        Fitted equation:{' '}
+                        <span className="font-mono text-teal-300">
+                          {result.errorReason ? (
+                            result.equation
+                          ) : (
+                            <>
+                              {variableYName} = <AnimatedNumber value={result.intercept} decimals={2} /> {result.slope >= 0 ? '+' : '−'} <AnimatedNumber value={Math.abs(result.slope)} decimals={4} />{variableXName}
+                            </>
+                          )}
+                        </span>{' '}
+                        with R² = <span className="font-mono text-emerald-400"><AnimatedNumber value={result.r2Percent} decimals={1} suffix="%" /></span> ({result.classification} fit).
                       </p>
                     </div>
 
                     {/* Layer 2: WHAT IT MEANS */}
                     <div>
                       <span className="font-mono text-xs text-slate-400 block mb-0.5">2. WHAT IT MEANS:</span>
-                      <p className="text-slate-300 leading-relaxed">
-                        {result.interpretation} {result.slope >= 0 ? `${variableYName} tends to increase as ${variableXName} increases within the observed dataset.` : `${variableYName} tends to decrease as ${variableXName} increases within the observed dataset.`}
-                      </p>
+                      <ScrollRevealText as="p" text={`${result.interpretation} ${result.slope >= 0 ? `${variableYName} tends to increase as ${variableXName} increases within the observed dataset.` : `${variableYName} tends to decrease as ${variableXName} increases within the observed dataset.`}`} className="text-slate-300 leading-relaxed" />
                     </div>
 
                     {/* Layer 3: BUSINESS IMPLICATION */}
                     <div>
                       <span className="font-mono text-xs text-teal-400/90 block mb-0.5">3. BUSINESS IMPLICATION:</span>
-                      <p className="text-teal-200 leading-relaxed">
-                        {result.action}
-                      </p>
+                      <ScrollRevealText as="p" text={result.action} className="text-teal-200 leading-relaxed" />
                     </div>
                   </div>
 
@@ -689,12 +812,12 @@ export function RegressionModule({ onResultCalculated }: RegressionModuleProps =
                   </div>
 
                   <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 text-slate-400">
-                    <div>n = {result.steps.n}</div>
-                    <div>ΣX = {result.steps.sumX}</div>
-                    <div>ΣY = {result.steps.sumY}</div>
-                    <div>ΣXY = {result.steps.sumXY}</div>
-                    <div>ΣX² = {result.steps.sumX2}</div>
-                    <div>ΣY² = {result.steps.sumY2}</div>
+                    <div>n = <AnimatedNumber value={result.steps.n} decimals={0} /></div>
+                    <div>ΣX = <AnimatedNumber value={result.steps.sumX} /></div>
+                    <div>ΣY = <AnimatedNumber value={result.steps.sumY} /></div>
+                    <div>ΣXY = <AnimatedNumber value={result.steps.sumXY} /></div>
+                    <div>ΣX² = <AnimatedNumber value={result.steps.sumX2} /></div>
+                    <div>ΣY² = <AnimatedNumber value={result.steps.sumY2} /></div>
                   </div>
 
                   <div>

@@ -16,10 +16,25 @@ import {
 } from 'lucide-react';
 import { CentralTendencyResult } from '../types/statistics';
 import { formatNumber } from '../statistics/centralTendency';
+import { AnimatedNumber } from './AnimatedNumber';
+import { ScrollRevealText } from './ScrollRevealText';
 
 interface CentralTendencyModuleProps {
   result: CentralTendencyResult | null;
   variableName: string;
+}
+
+/**
+ * Determines sensible decimal display precision:
+ * - Whole numbers (counts, whole observations, integers) -> 0 decimals (clean whole numbers)
+ * - Single-decimal fractions (e.g., .5) -> 1 decimal
+ * - General statistics (means, variance, std dev) -> up to maxDecimals (default 2)
+ */
+function getSensibleDecimals(val: number | null | undefined, maxDecimals = 2): number {
+  if (val === null || val === undefined || !isFinite(val)) return 0;
+  if (Math.abs(val - Math.round(val)) < 1e-7) return 0;
+  if (Math.abs(val * 10 - Math.round(val * 10)) < 1e-7) return 1;
+  return maxDecimals;
 }
 
 export function CentralTendencyModule({ result, variableName }: CentralTendencyModuleProps) {
@@ -81,10 +96,10 @@ export function CentralTendencyModule({ result, variableName }: CentralTendencyM
                 Arithmetic Mean (μ)
               </span>
               <span className="font-mono text-xl sm:text-2xl font-bold text-emerald-400">
-                {formatNumber(result.mean)}
+                <AnimatedNumber value={result.mean} decimals={getSensibleDecimals(result.mean, 2)} />
               </span>
               <span className="text-[11px] text-slate-500 block mt-1">
-                ΣX / N ({formatNumber(result.total)} / {result.count})
+                ΣX / N (<AnimatedNumber value={result.total} decimals={getSensibleDecimals(result.total, 2)} /> / <AnimatedNumber value={result.count} decimals={0} />)
               </span>
             </div>
 
@@ -94,7 +109,7 @@ export function CentralTendencyModule({ result, variableName }: CentralTendencyM
                 Median
               </span>
               <span className="font-mono text-xl sm:text-2xl font-bold text-slate-100">
-                {formatNumber(result.median)}
+                <AnimatedNumber value={result.median} decimals={getSensibleDecimals(result.median, 2)} />
               </span>
               <span className="text-[11px] text-slate-500 block mt-1">
                 50th percentile rank
@@ -110,7 +125,12 @@ export function CentralTendencyModule({ result, variableName }: CentralTendencyM
                 {result.mode === 'NO_MODE' ? (
                   <span className="text-sm text-slate-400 font-normal">No Mode</span>
                 ) : (
-                  result.mode.map((m) => formatNumber(m)).join(', ')
+                  result.mode.map((m, i) => (
+                    <span key={i}>
+                      {i > 0 ? ', ' : ''}
+                      <AnimatedNumber value={m} decimals={getSensibleDecimals(m, 2)} />
+                    </span>
+                  ))
                 )}
               </span>
               <span className="text-[11px] text-slate-500 block mt-1 truncate">
@@ -124,9 +144,11 @@ export function CentralTendencyModule({ result, variableName }: CentralTendencyM
                 Mean–Median Diff %
               </span>
               <span className="font-mono text-xl sm:text-2xl font-bold text-teal-300">
-                {result.meanMedianDiffPercent !== null
-                  ? `${formatNumber(result.meanMedianDiffPercent)}%`
-                  : 'N/A'}
+                {result.meanMedianDiffPercent !== null ? (
+                  <AnimatedNumber value={result.meanMedianDiffPercent} decimals={2} suffix="%" />
+                ) : (
+                  'N/A'
+                )}
               </span>
               <span className="text-[11px] text-slate-500 block mt-1">
                 Symmetry indicator
@@ -139,19 +161,19 @@ export function CentralTendencyModule({ result, variableName }: CentralTendencyM
           <div className="p-3 rounded-lg bg-slate-950/60 border border-slate-800/80 grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs font-mono">
             <div>
               <span className="text-slate-500 block">Total Observations (N):</span>
-              <span className="text-slate-200 font-semibold">{result.count}</span>
+              <span className="text-slate-200 font-semibold"><AnimatedNumber value={result.count} decimals={0} /></span>
             </div>
             <div>
               <span className="text-slate-500 block">Sum Total (ΣX):</span>
-              <span className="text-slate-200 font-semibold">{formatNumber(result.total)}</span>
+              <span className="text-slate-200 font-semibold"><AnimatedNumber value={result.total} decimals={getSensibleDecimals(result.total, 2)} /></span>
             </div>
             <div>
               <span className="text-slate-500 block">Dataset Minimum:</span>
-              <span className="text-slate-200 font-semibold">{formatNumber(result.min)}</span>
+              <span className="text-slate-200 font-semibold"><AnimatedNumber value={result.min} decimals={getSensibleDecimals(result.min, 2)} /></span>
             </div>
             <div>
               <span className="text-slate-500 block">Dataset Maximum:</span>
-              <span className="text-slate-200 font-semibold">{formatNumber(result.max)}</span>
+              <span className="text-slate-200 font-semibold"><AnimatedNumber value={result.max} decimals={getSensibleDecimals(result.max, 2)} /></span>
             </div>
           </div>
 
@@ -165,23 +187,17 @@ export function CentralTendencyModule({ result, variableName }: CentralTendencyM
             <div className="space-y-3 text-xs sm:text-sm">
               <div>
                 <span className="font-mono text-xs text-slate-400 block mb-0.5">1. STATISTICAL INTERPRETATION:</span>
-                <p className="text-slate-200 leading-relaxed font-normal">
-                  {result.interpretation}
-                </p>
+                <ScrollRevealText as="p" text={result.interpretation} className="text-slate-200 leading-relaxed font-normal" />
               </div>
 
               <div>
                 <span className="font-mono text-xs text-slate-400 block mb-0.5">2. BUSINESS SIGNAL ({variableName}):</span>
-                <p className="text-slate-300 leading-relaxed">
-                  {result.businessSignal}
-                </p>
+                <ScrollRevealText as="p" text={result.businessSignal} className="text-slate-300 leading-relaxed" />
               </div>
 
               <div>
                 <span className="font-mono text-xs text-emerald-400/90 block mb-0.5">3. ACTIONABLE IMPLICATION:</span>
-                <p className="text-emerald-200 leading-relaxed">
-                  {result.action}
-                </p>
+                <ScrollRevealText as="p" text={result.action} className="text-emerald-200 leading-relaxed" />
               </div>
             </div>
           </div>
@@ -207,7 +223,7 @@ export function CentralTendencyModule({ result, variableName }: CentralTendencyM
                 <div>
                   <span className="text-slate-500 block">// Arithmetic Mean</span>
                   <div className="text-slate-300">{result.steps.meanFormula}</div>
-                  <div className="text-emerald-400">Mean = {result.steps.meanCalculation} = {result.steps.meanResult}</div>
+                  <div className="text-emerald-400">Mean = {result.steps.meanCalculation} = <AnimatedNumber value={result.steps.meanResult} /></div>
                 </div>
 
                 <div>

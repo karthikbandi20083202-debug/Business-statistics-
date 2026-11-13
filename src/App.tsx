@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { motion } from 'motion/react';
 import { 
   ArrowRight, 
@@ -18,10 +18,16 @@ import {
 } from 'lucide-react';
 import { BrandLogo } from './components/BrandLogo';
 import { BusinessAnalyzer } from './components/BusinessAnalyzer';
+import { initGlobalScrollReveal } from './utils/scrollReveal';
 
 export default function App() {
   // Page mode: 'landing' or 'analyzer'
   const [currentView, setCurrentView] = useState<'landing' | 'analyzer'>('landing');
+
+  // Initialize global scroll reveal observer
+  useEffect(() => {
+    return initGlobalScrollReveal();
+  }, [currentView]);
 
   // Smooth scroll handler
   const scrollToSection = (id: string) => {

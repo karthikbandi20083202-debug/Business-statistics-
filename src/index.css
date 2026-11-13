@@ -33,3 +33,61 @@ body {
 .bg-radial-gradient {
   background: radial-gradient(circle at 50% 0%, rgba(56, 189, 248, 0.08) 0%, rgba(99, 102, 241, 0.06) 35%, rgba(6, 9, 19, 0) 70%);
 }
+
+/* ==================================================
+   GLOBAL SCROLL TEXT REVEAL ANIMATIONS (Cascading Stream)
+   ================================================== */
+
+.scroll-text-reveal {
+  opacity: 0;
+  transform: translateY(10px);
+  will-change: opacity, transform;
+}
+
+.scroll-text-reveal.is-revealed {
+  opacity: 1;
+  transform: translateY(0);
+  transition: opacity 0.36s cubic-bezier(0.16, 1, 0.3, 1), transform 0.36s cubic-bezier(0.16, 1, 0.3, 1);
+  transition-delay: var(--cascade-delay, 0ms);
+}
+
+/* Cascading group and line-by-line reveal within Business Analyzer modules */
+.scroll-reveal-group .reveal-line,
+.reveal-cascade-group > .cascade-line,
+.reveal-cascade-group > [data-cascade-item],
+[data-cascade-group="true"] > * {
+  opacity: 0;
+  transform: translateY(10px);
+  will-change: opacity, transform;
+  transition: opacity 0.36s cubic-bezier(0.16, 1, 0.3, 1), transform 0.36s cubic-bezier(0.16, 1, 0.3, 1);
+  transition-delay: var(--cascade-delay, 0ms);
+}
+
+.scroll-reveal-group.is-revealed .reveal-line,
+.reveal-cascade-group.is-revealed > .cascade-line,
+.reveal-cascade-group.is-revealed > [data-cascade-item],
+[data-cascade-group="true"].is-revealed > * {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+/* Global Reduced-Motion Accessibility Override */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+
+  .scroll-text-reveal,
+  .scroll-reveal-group .reveal-line,
+  .reveal-cascade-group > .cascade-line,
+  .reveal-cascade-group > [data-cascade-item],
+  [data-cascade-group="true"] > * {
+    opacity: 1 !important;
+    transform: none !important;
+    transition: none !important;
+  }
+}
+

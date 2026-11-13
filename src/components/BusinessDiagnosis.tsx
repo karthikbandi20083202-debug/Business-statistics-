@@ -36,6 +36,8 @@ import {
   EvidenceLevel 
 } from '../types/statistics';
 import { generateBusinessDiagnosis } from '../statistics/businessDiagnosis';
+import { AnimatedNumber } from './AnimatedNumber';
+import { ScrollRevealText } from './ScrollRevealText';
 
 interface BusinessDiagnosisProps {
   evidence: DiagnosisEvidenceState;
@@ -207,18 +209,16 @@ export function BusinessDiagnosis({
           </h3>
         </div>
 
-        <p className="text-sm sm:text-base text-slate-200 leading-relaxed font-normal">
-          {report.executiveSummary}
-        </p>
+        <ScrollRevealText as="p" text={report.executiveSummary} className="text-sm sm:text-base text-slate-200 leading-relaxed font-normal" />
 
         <div className="pt-2 grid grid-cols-1 md:grid-cols-2 gap-4 text-xs font-mono">
           <div className="p-3.5 rounded-lg bg-slate-950/80 border border-slate-800">
             <span className="text-rose-400 font-bold block mb-1">PRIMARY BUSINESS CONCERN:</span>
-            <p className="text-slate-300">{report.managementTakeaway.biggestWeakness}</p>
+            <ScrollRevealText as="p" text={report.managementTakeaway.biggestWeakness} className="text-slate-300" />
           </div>
           <div className="p-3.5 rounded-lg bg-slate-950/80 border border-slate-800">
             <span className="text-emerald-400 font-bold block mb-1">PRIMARY GROWTH OPPORTUNITY:</span>
-            <p className="text-slate-300">{report.managementTakeaway.biggestOpportunity}</p>
+            <ScrollRevealText as="p" text={report.managementTakeaway.biggestOpportunity} className="text-slate-300" />
           </div>
         </div>
       </div>
@@ -261,7 +261,7 @@ export function BusinessDiagnosis({
               </div>
 
               <div className="font-mono text-base font-bold text-white group-hover:text-purple-300 transition-colors">
-                {signal.metric}
+                <AnimatedNumber value={signal.metric} />
               </div>
 
               <p className="text-xs text-slate-400 leading-relaxed">

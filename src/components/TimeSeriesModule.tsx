@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { 
   Calculator, 
   ChevronDown, 
@@ -36,6 +36,8 @@ import {
   parseTimeSeriesDataset 
 } from '../statistics/validation';
 import { formatNumber } from '../statistics/centralTendency';
+import { AnimatedNumber } from './AnimatedNumber';
+import { ScrollRevealText } from './ScrollRevealText';
 
 // Verified KOI & CO. Customer Footfall Sample Dataset (15 Observations: 24 Aug - 7 Sep)
 const KOI_TIMELINE_SAMPLE = [
@@ -61,16 +63,33 @@ interface TimeSeriesModuleProps {
 }
 
 export function TimeSeriesModule({ onResultCalculated }: TimeSeriesModuleProps = {}) {
-  // Input configuration
+  // Input configuration (Option A: Sample Data vs Option B: Custom N Configuration)
   const [variableName, setVariableName] = useState('Customer Footfall');
-  const [periodCount, setPeriodCount] = useState(12);
+  const [dataSource, setDataSource] = useState<'custom' | 'sample'>('custom');
+  const [customPeriodCount, setCustomPeriodCount] = useState(12);
+  const [customNInput, setCustomNInput] = useState('12');
+  const [nError, setNError] = useState<string | null>(null);
   const [showConfig, setShowConfig] = useState(false);
 
-  // Raw period and value inputs
-  const [periodLabels, setPeriodLabels] = useState<string[]>(
+  // Separate raw period and value inputs for Custom N and Sample Data
+  const [customLabels, setCustomLabels] = useState<string[]>(
     Array.from({ length: 12 }, (_, i) => `Period ${i + 1}`)
   );
-  const [values, setValues] = useState<string[]>(Array(12).fill(''));
+  const [customValues, setCustomValues] = useState<string[]>(Array(12).fill(''));
+  const [sampleLabels, setSampleLabels] = useState<string[]>(
+    KOI_TIMELINE_SAMPLE.map((s) => s.period)
+  );
+  const [sampleValues, setSampleValues] = useState<string[]>(
+    KOI_TIMELINE_SAMPLE.map((s) => s.value.toString())
+  );
+
+  const periodCount = dataSource === 'sample' ? sampleLabels.length : customPeriodCount;
+  const periodLabels = dataSource === 'sample' ? sampleLabels : customLabels;
+  const values = dataSource === 'sample' ? sampleValues : customValues;
+
+  useEffect(() => {
+    setCustomNInput(String(customPeriodCount));
+  }, [customPeriodCount]);
 
   // Validation & Result states
   const [validationState, setValidationState] = useState<TimeSeriesValidationState | null>(null);
@@ -88,9 +107,15 @@ export function TimeSeriesModule({ onResultCalculated }: TimeSeriesModuleProps =
 
   // Input change handlers
   const handlePeriodChange = (idx: number, val: string) => {
-    const updated = [...periodLabels];
-    updated[idx] = val;
-    setPeriodLabels(updated);
+    if (dataSource === 'sample') {
+      const updated = [...sampleLabels];
+      updated[idx] = val;
+      setSampleLabels(updated);
+    } else {
+      const updated = [...customLabels];
+      updated[idx] = val;
+      setCustomLabels(updated);
+    }
 
     if (hasAnalyzed) {
       setHasAnalyzed(false);
@@ -104,9 +129,15 @@ export function TimeSeriesModule({ onResultCalculated }: TimeSeriesModuleProps =
   };
 
   const handleValueChange = (idx: number, val: string) => {
-    const updated = [...values];
-    updated[idx] = val;
-    setValues(updated);
+    if (dataSource === 'sample') {
+      const updated = [...sampleValues];
+      updated[idx] = val;
+      setSampleValues(updated);
+    } else {
+      const updated = [...customValues];
+      updated[idx] = val;
+      setCustomValues(updated);
+    }
 
     if (hasAnalyzed) {
       setHasAnalyzed(false);
@@ -120,18 +151,19 @@ export function TimeSeriesModule({ onResultCalculated }: TimeSeriesModuleProps =
   };
 
   const handlePeriodCountChange = (newCount: number) => {
-    if (newCount < 3 || newCount > 40) return;
-    setPeriodCount(newCount);
+    if (!Number.isInteger(newCount) || newCount < 3) return;
+    setCustomPeriodCount(newCount);
 
-    const newLabels = Array.from({ length: newCount }, (_, i) => 
-      periodLabels[i] || `Period ${i + 1}`
+    const newLabels = Array.from({ length: newCount }, (_, i) =>
+      customLabels[i] !== undefined ? customLabels[i] : `Period ${i + 1}`
     );
-    const newVals = Array.from({ length: newCount }, (_, i) => 
-      values[i] || ''
+    const newVals = Array.from({ length: newCount }, (_, i) =>
+      customValues[i] ?? ''
     );
 
-    setPeriodLabels(newLabels);
-    setValues(newVals);
+    setCustomLabels(newLabels);
+    setCustomValues(newVals);
+    setDataSource('custom');
     setCustomForecastT(String(newCount + 1));
     setHasAnalyzed(false);
     setResult(null);
@@ -140,11 +172,26 @@ export function TimeSeriesModule({ onResultCalculated }: TimeSeriesModuleProps =
     setValidationState(null);
   };
 
+  const applyCustomN = () => {
+    const trimmed = customNInput.trim();
+    if (!/^\d+$/.test(trimmed)) {
+      setNError('Enter a valid positive integer n (n ≥ 3).');
+      return;
+    }
+    const parsed = parseInt(trimmed, 10);
+    if (!Number.isInteger(parsed) || parsed < 3) {
+      setNError('Time series requires at least 3 periods (n ≥ 3).');
+      return;
+    }
+    setNError(null);
+    handlePeriodCountChange(parsed);
+  };
+
   const handleLoadSample = () => {
-    setPeriodCount(KOI_TIMELINE_SAMPLE.length);
     setVariableName('Customer Footfall');
-    setPeriodLabels(KOI_TIMELINE_SAMPLE.map((s) => s.period));
-    setValues(KOI_TIMELINE_SAMPLE.map((s) => s.value.toString()));
+    setSampleLabels(KOI_TIMELINE_SAMPLE.map((s) => s.period));
+    setSampleValues(KOI_TIMELINE_SAMPLE.map((s) => s.value.toString()));
+    setDataSource('sample');
     setCustomForecastT(String(KOI_TIMELINE_SAMPLE.length + 1));
     setHasAnalyzed(false);
     setResult(null);
@@ -153,9 +200,24 @@ export function TimeSeriesModule({ onResultCalculated }: TimeSeriesModuleProps =
     setValidationState(null);
   };
 
+  const handleSwitchToCustom = () => {
+    setDataSource('custom');
+    setCustomForecastT(String(customPeriodCount + 1));
+    setHasAnalyzed(false);
+    setResult(null);
+    setCustomForecastResult(null);
+    onResultCalculated?.(null);
+    setValidationState(null);
+  };
+
   const handleClear = () => {
-    setPeriodLabels(Array.from({ length: periodCount }, (_, i) => `Period ${i + 1}`));
-    setValues(Array(periodCount).fill(''));
+    if (dataSource === 'sample') {
+      setSampleLabels(Array.from({ length: sampleLabels.length }, (_, i) => `Period ${i + 1}`));
+      setSampleValues(Array(sampleValues.length).fill(''));
+    } else {
+      setCustomLabels(Array.from({ length: customPeriodCount }, (_, i) => `Period ${i + 1}`));
+      setCustomValues(Array(customPeriodCount).fill(''));
+    }
     setHasAnalyzed(false);
     setResult(null);
     setCustomForecastResult(null);
@@ -427,29 +489,33 @@ export function TimeSeriesModule({ onResultCalculated }: TimeSeriesModuleProps =
               const cx = getX(row.t);
               const cy = getY(row.y);
               const isHovered = hoveredIdx === idx;
+              const labelStep = totalPoints > 18 ? Math.ceil(totalPoints / 12) : 1;
+              const showLabel = idx % labelStep === 0 || isHovered;
 
               return (
                 <g key={row.t} className="cursor-pointer" onMouseEnter={() => setHoveredIdx(idx)} onMouseLeave={() => setHoveredIdx(null)}>
                   <circle
                     cx={cx}
                     cy={cy}
-                    r={isHovered ? 6 : 4}
+                    r={isHovered ? 6 : totalPoints > 40 ? 2.5 : 4}
                     fill={isHovered ? '#34d399' : '#10b981'}
                     stroke="#020617"
-                    strokeWidth="2"
+                    strokeWidth={totalPoints > 40 ? 1 : 2}
                     className="transition-all"
                   />
                   {/* Period label on X-axis */}
-                  <text
-                    x={cx}
-                    y={height - padY + 15}
-                    textAnchor="middle"
-                    fill={isHovered ? '#34d399' : '#64748b'}
-                    fontSize="9"
-                    fontFamily="monospace"
-                  >
-                    {row.periodLabel}
-                  </text>
+                  {showLabel && (
+                    <text
+                      x={cx}
+                      y={height - padY + 15}
+                      textAnchor="middle"
+                      fill={isHovered ? '#34d399' : '#64748b'}
+                      fontSize="9"
+                      fontFamily="monospace"
+                    >
+                      {row.periodLabel}
+                    </text>
+                  )}
                 </g>
               );
             })}
@@ -460,28 +526,31 @@ export function TimeSeriesModule({ onResultCalculated }: TimeSeriesModuleProps =
               const cy = getY(f.forecastedValue);
               const globalIdx = audit.length + fIdx;
               const isHovered = hoveredIdx === globalIdx;
+              const showLabel = totalPoints <= 18 || fIdx === forecasts.length - 1 || isHovered;
 
               return (
                 <g key={f.t} className="cursor-pointer" onMouseEnter={() => setHoveredIdx(globalIdx)} onMouseLeave={() => setHoveredIdx(null)}>
                   <circle
                     cx={cx}
                     cy={cy}
-                    r={isHovered ? 6 : 4}
+                    r={isHovered ? 6 : totalPoints > 40 ? 3 : 4}
                     fill="#0f172a"
                     stroke="#c084fc"
-                    strokeWidth="2.5"
+                    strokeWidth={totalPoints > 40 ? 1.5 : 2.5}
                     className="transition-all"
                   />
-                  <text
-                    x={cx}
-                    y={height - padY + 15}
-                    textAnchor="middle"
-                    fill={isHovered ? '#c084fc' : '#94a3b8'}
-                    fontSize="8.5"
-                    fontFamily="monospace"
-                  >
-                    {f.periodLabel}
-                  </text>
+                  {showLabel && (
+                    <text
+                      x={cx}
+                      y={height - padY + 15}
+                      textAnchor="middle"
+                      fill={isHovered ? '#c084fc' : '#94a3b8'}
+                      fontSize="8.5"
+                      fontFamily="monospace"
+                    >
+                      {f.periodLabel}
+                    </text>
+                  )}
                 </g>
               );
             })}
@@ -586,15 +655,30 @@ export function TimeSeriesModule({ onResultCalculated }: TimeSeriesModuleProps =
 
           {/* Controls Bar */}
           <div className="flex flex-wrap items-center justify-between gap-3 pb-2 border-b border-slate-800/60">
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               <button
                 type="button"
                 onClick={handleLoadSample}
-                className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-300 text-xs font-mono transition-colors cursor-pointer border border-indigo-500/30"
+                className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded text-xs font-mono transition-colors cursor-pointer border ${
+                  dataSource === 'sample'
+                    ? 'bg-indigo-500/25 text-indigo-200 border-indigo-400/60'
+                    : 'bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-300 border-indigo-500/30'
+                }`}
               >
                 <Sparkles className="w-3 h-3 text-indigo-400" />
                 <span>LOAD SAMPLE VALUES</span>
               </button>
+
+              {dataSource === 'sample' && (
+                <button
+                  type="button"
+                  onClick={handleSwitchToCustom}
+                  className="inline-flex items-center gap-1 px-2.5 py-1 rounded bg-slate-900 hover:bg-slate-800 text-slate-300 hover:text-white text-xs font-mono transition-colors cursor-pointer border border-slate-700"
+                  title="Switch back to your independent Custom N timeline"
+                >
+                  <span>CUSTOM N ({customPeriodCount})</span>
+                </button>
+              )}
 
               <button
                 type="button"
@@ -646,21 +730,56 @@ export function TimeSeriesModule({ onResultCalculated }: TimeSeriesModuleProps =
                     Chronological Periods (n)
                   </label>
                   <div className="flex items-center gap-2">
-                    {[8, 10, 12, 14, 16].map((cnt) => (
-                      <button
-                        key={cnt}
-                        type="button"
-                        onClick={() => handlePeriodCountChange(cnt)}
-                        className={`px-2 py-1 rounded font-mono text-xs cursor-pointer ${
-                          periodCount === cnt
-                            ? 'bg-indigo-500/20 text-indigo-300 border border-indigo-500/50'
-                            : 'bg-slate-900 text-slate-400 border border-slate-800 hover:text-white'
-                        }`}
-                      >
-                        n = {cnt}
-                      </button>
-                    ))}
+                    <input
+                      type="text"
+                      inputMode="numeric"
+                      value={customNInput}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        if (/^\d*$/.test(val)) {
+                          setCustomNInput(val);
+                          if (nError) setNError(null);
+                        }
+                      }}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          e.preventDefault();
+                          applyCustomN();
+                        }
+                      }}
+                      onBlur={() => {
+                        const trimmed = customNInput.trim();
+                        const parsed = parseInt(trimmed, 10);
+                        if (/^\d+$/.test(trimmed) && parsed >= 3) {
+                          if (parsed !== customPeriodCount) {
+                            handlePeriodCountChange(parsed);
+                          }
+                          setNError(null);
+                        } else {
+                          setCustomNInput(String(customPeriodCount));
+                          setNError(null);
+                        }
+                      }}
+                      placeholder="Enter n (e.g. 25)"
+                      aria-label="Custom Chronological Periods n"
+                      className="w-28 px-2.5 py-1.5 rounded bg-slate-900 border border-slate-700 text-white focus:outline-none focus:border-indigo-500 font-mono text-xs"
+                    />
+                    <button
+                      type="button"
+                      onMouseDown={(e) => e.preventDefault()}
+                      onClick={applyCustomN}
+                      className="px-2.5 py-1.5 rounded font-mono text-xs font-semibold bg-indigo-500/20 text-indigo-300 border border-indigo-500/50 hover:bg-indigo-500/30 transition-colors cursor-pointer"
+                    >
+                      Apply n
+                    </button>
                   </div>
+                  {nError ? (
+                    <p className="text-[10px] text-rose-400 font-mono mt-1">{nError}</p>
+                  ) : (
+                    <p className="text-[10px] text-slate-500 font-mono mt-1">
+                      Any integer n ≥ 3 (e.g. 5, 12, 25, 50, 100)
+                    </p>
+                  )}
                 </div>
               </div>
             </div>
@@ -797,11 +916,17 @@ export function TimeSeriesModule({ onResultCalculated }: TimeSeriesModuleProps =
                     Secular Trend Equation
                   </span>
                   <p className="font-mono text-base font-bold text-white tracking-tight break-all">
-                    {result.trendEquation}
+                    {result.errorReason ? (
+                      result.trendEquation
+                    ) : (
+                      <>
+                        T_t = <AnimatedNumber value={result.intercept} decimals={2} /> {result.slope >= 0 ? '+' : '−'} (<AnimatedNumber value={Math.abs(result.slope)} decimals={4} /> · t)
+                      </>
+                    )}
                   </p>
                   <div className="mt-2 text-[11px] font-mono text-slate-400 space-y-0.5">
-                    <div>Slope (b): <strong className="text-indigo-300">{formatNumber(result.slope, 4)} / period</strong></div>
-                    <div>Baseline (a): <strong className="text-slate-300">{formatNumber(result.intercept, 2)}</strong></div>
+                    <div>Slope (b): <strong className="text-indigo-300"><AnimatedNumber value={result.slope} decimals={4} suffix=" / period" /></strong></div>
+                    <div>Baseline (a): <strong className="text-slate-300"><AnimatedNumber value={result.intercept} decimals={2} /></strong></div>
                   </div>
                 </div>
 
@@ -814,7 +939,7 @@ export function TimeSeriesModule({ onResultCalculated }: TimeSeriesModuleProps =
                     {renderTrajectoryBadge(result.trajectory)}
                   </div>
                   <div className="text-[11px] font-mono text-slate-400 space-y-0.5">
-                    <div>Pacing: <strong className="text-emerald-400">{formatNumber(result.growthRatePercent, 2)}%</strong> / period</div>
+                    <div>Pacing: <strong className="text-emerald-400"><AnimatedNumber value={result.growthRatePercent} decimals={2} suffix="%" /></strong> / period</div>
                     <div>Direction: <span className="text-slate-300">{result.slope >= 0 ? 'Upward secular shift' : 'Downwards secular drift'}</span></div>
                   </div>
                 </div>
@@ -825,11 +950,11 @@ export function TimeSeriesModule({ onResultCalculated }: TimeSeriesModuleProps =
                     Historical Baseline
                   </span>
                   <p className="font-mono text-2xl font-bold text-white">
-                    {formatNumber(result.meanY, 2)}
+                    <AnimatedNumber value={result.meanY} decimals={2} />
                   </p>
                   <div className="mt-2 text-[11px] font-mono text-slate-400 space-y-0.5">
-                    <div>Total Volume (ΣY): <strong className="text-slate-300">{formatNumber(result.sumY)}</strong></div>
-                    <div>Timeline Depth: <strong className="text-slate-300">n = {result.n} periods</strong></div>
+                    <div>Total Volume (ΣY): <strong className="text-slate-300"><AnimatedNumber value={result.sumY} decimals={Math.abs(result.sumY - Math.round(result.sumY)) < 1e-7 ? 0 : 2} /></strong></div>
+                    <div>Timeline Depth: <strong className="text-slate-300">n = <AnimatedNumber value={result.n} decimals={0} /> periods</strong></div>
                   </div>
                 </div>
 
@@ -839,7 +964,7 @@ export function TimeSeriesModule({ onResultCalculated }: TimeSeriesModuleProps =
                     Trend Fit (MAPE)
                   </span>
                   <p className="font-mono text-2xl font-bold text-teal-300">
-                    {formatNumber(result.mape, 2)}%
+                    <AnimatedNumber value={result.mape} decimals={2} suffix="%" />
                   </p>
                   <div className="mt-2 text-[11px] font-mono text-slate-400 space-y-0.5">
                     <div>Moving Avg Span: <strong className="text-amber-300">3 Periods</strong></div>
@@ -859,7 +984,7 @@ export function TimeSeriesModule({ onResultCalculated }: TimeSeriesModuleProps =
                     </h3>
                   </div>
                   <span className="font-mono text-xs text-slate-500">
-                    n = {result.n} Observed + 3 Future Projections
+                    n = <AnimatedNumber value={result.n} decimals={0} /> Observed + 3 Future Projections
                   </span>
                 </div>
 
@@ -894,7 +1019,7 @@ export function TimeSeriesModule({ onResultCalculated }: TimeSeriesModuleProps =
                           {fc.periodLabel}
                         </div>
                         <div className="font-mono text-base font-bold text-white">
-                          {formatNumber(fc.forecastedValue)}
+                          <AnimatedNumber value={fc.forecastedValue} decimals={2} />
                         </div>
                         <div className="text-[10px] font-mono text-slate-500 mt-1">
                           {variableName}
@@ -925,7 +1050,6 @@ export function TimeSeriesModule({ onResultCalculated }: TimeSeriesModuleProps =
                         id="custom-t-input"
                         type="number"
                         min="1"
-                        max="100"
                         value={customForecastT}
                         onChange={(e) => setCustomForecastT(e.target.value)}
                         placeholder="e.g. 15"
@@ -947,7 +1071,7 @@ export function TimeSeriesModule({ onResultCalculated }: TimeSeriesModuleProps =
                         Forecast for Period t = {customForecastT}:
                       </span>
                       <div className="font-mono text-lg font-bold text-white">
-                        {formatNumber(customForecastResult)}
+                        <AnimatedNumber value={customForecastResult} decimals={2} />
                       </div>
                       <div className="text-[10px] font-mono text-slate-400 mt-0.5">
                         T = {formatNumber(result.intercept, 2)} + ({formatNumber(result.slope, 4)} × {customForecastT})
@@ -970,7 +1094,7 @@ export function TimeSeriesModule({ onResultCalculated }: TimeSeriesModuleProps =
                 <div className="space-y-3 text-xs sm:text-sm leading-relaxed">
                   <p className="text-slate-300">
                     <strong className="text-indigo-300">Trend Assessment: </strong>
-                    {result.interpretation}
+                    <ScrollRevealText as="span" text={result.interpretation} className="inline text-slate-300" />
                   </p>
 
                   <div className="p-3 rounded-lg bg-slate-950/70 border border-slate-800/80 flex items-start gap-2.5">
@@ -979,7 +1103,7 @@ export function TimeSeriesModule({ onResultCalculated }: TimeSeriesModuleProps =
                       <span className="font-mono text-xs text-emerald-400 font-semibold block mb-0.5">
                         COMMERCIAL SIGNAL
                       </span>
-                      <p className="text-slate-300 text-xs">{result.businessSignal}</p>
+                      <ScrollRevealText as="p" text={result.businessSignal} className="text-slate-300 text-xs" />
                     </div>
                   </div>
 
@@ -989,7 +1113,7 @@ export function TimeSeriesModule({ onResultCalculated }: TimeSeriesModuleProps =
                       <span className="font-mono text-xs text-indigo-400 font-semibold block mb-0.5">
                         TACTICAL ACTION FOR KOI &amp; CO.
                       </span>
-                      <p className="text-slate-300 text-xs">{result.action}</p>
+                      <ScrollRevealText as="p" text={result.action} className="text-slate-300 text-xs" />
                     </div>
                   </div>
                 </div>
@@ -1025,7 +1149,9 @@ export function TimeSeriesModule({ onResultCalculated }: TimeSeriesModuleProps =
                       <div className="p-3.5 rounded-lg bg-slate-900 border border-slate-800 space-y-2 text-slate-300">
                         <div>
                           <span className="text-slate-500">Summary Totals: </span>
-                          <span>n = {result.steps.n} · Σt = {result.steps.sumT} · ΣY = {result.steps.sumY} · Σ(t·Y) = {result.steps.sumTY} · Σt² = {result.steps.sumT2}</span>
+                          <span>
+                            n = <AnimatedNumber value={result.steps.n} decimals={0} /> · Σt = <AnimatedNumber value={result.steps.sumT} /> · ΣY = <AnimatedNumber value={result.steps.sumY} /> · Σ(t·Y) = <AnimatedNumber value={result.steps.sumTY} /> · Σt² = <AnimatedNumber value={result.steps.sumT2} />
+                          </span>
                         </div>
                         <div>
                           <span className="text-slate-500">Slope Formula: </span>
@@ -1079,32 +1205,48 @@ export function TimeSeriesModule({ onResultCalculated }: TimeSeriesModuleProps =
                               <tr key={row.t} className="hover:bg-slate-900/50">
                                 <td className="p-2 text-center text-slate-500">{row.t}</td>
                                 <td className="p-2 text-slate-300 font-semibold">{row.periodLabel}</td>
-                                <td className="p-2 text-right text-emerald-400">{formatNumber(row.y)}</td>
-                                <td className="p-2 text-right text-slate-300">{formatNumber(row.ty)}</td>
-                                <td className="p-2 text-right text-slate-400">{row.t2}</td>
-                                <td className="p-2 text-right text-indigo-300 font-medium">{formatNumber(row.trendValue)}</td>
-                                <td className="p-2 text-right text-amber-300">
-                                  {row.movingAverage3 !== null ? formatNumber(row.movingAverage3) : '—'}
+                                <td className="p-2 text-right text-emerald-400">
+                                  <AnimatedNumber value={row.y} decimals={Math.abs(row.y - Math.round(row.y)) < 1e-7 ? 0 : 2} />
                                 </td>
-                                <td className="p-2 text-right text-teal-300">
-                                  {row.residual >= 0 ? '+' : ''}{formatNumber(row.residual)}
+                                <td className="p-2 text-right text-slate-300">
+                                  <AnimatedNumber value={row.ty} decimals={Math.abs(row.ty - Math.round(row.ty)) < 1e-7 ? 0 : 2} />
                                 </td>
                                 <td className="p-2 text-right text-slate-400">
-                                  {row.residualPercent >= 0 ? '+' : ''}{formatNumber(row.residualPercent, 1)}%
+                                  <AnimatedNumber value={row.t2} decimals={0} />
+                                </td>
+                                <td className="p-2 text-right text-indigo-300 font-medium">
+                                  <AnimatedNumber value={row.trendValue} decimals={2} />
+                                </td>
+                                <td className="p-2 text-right text-amber-300">
+                                  {row.movingAverage3 !== null ? <AnimatedNumber value={row.movingAverage3} decimals={2} /> : '—'}
+                                </td>
+                                <td className="p-2 text-right text-teal-300">
+                                  <AnimatedNumber value={row.residual} decimals={2} prefix={row.residual >= 0 ? '+' : ''} />
+                                </td>
+                                <td className="p-2 text-right text-slate-400">
+                                  <AnimatedNumber value={row.residualPercent} decimals={1} prefix={row.residualPercent >= 0 ? '+' : ''} suffix="%" />
                                 </td>
                               </tr>
                             ))}
                             {/* Totals Row */}
                             <tr className="bg-slate-900/90 font-bold border-t-2 border-slate-700 text-slate-200">
                               <td className="p-2 text-center text-indigo-400">Σ</td>
-                              <td className="p-2 text-indigo-400">Totals (n={result.n})</td>
-                              <td className="p-2 text-right text-emerald-400">{formatNumber(result.sumY)}</td>
-                              <td className="p-2 text-right text-slate-200">{formatNumber(result.sumTY)}</td>
-                              <td className="p-2 text-right text-slate-200">{result.sumT2}</td>
+                              <td className="p-2 text-indigo-400">Totals (n=<AnimatedNumber value={result.n} decimals={0} />)</td>
+                              <td className="p-2 text-right text-emerald-400">
+                                <AnimatedNumber value={result.sumY} decimals={Math.abs(result.sumY - Math.round(result.sumY)) < 1e-7 ? 0 : 2} />
+                              </td>
+                              <td className="p-2 text-right text-slate-200">
+                                <AnimatedNumber value={result.sumTY} decimals={Math.abs(result.sumTY - Math.round(result.sumTY)) < 1e-7 ? 0 : 2} />
+                              </td>
+                              <td className="p-2 text-right text-slate-200">
+                                <AnimatedNumber value={result.sumT2} decimals={0} />
+                              </td>
                               <td className="p-2 text-right text-indigo-300">—</td>
                               <td className="p-2 text-right text-amber-300">—</td>
                               <td className="p-2 text-right text-teal-300">Σ = 0.00</td>
-                              <td className="p-2 text-right text-slate-400">MAPE={formatNumber(result.mape, 1)}%</td>
+                              <td className="p-2 text-right text-slate-400">
+                                MAPE=<AnimatedNumber value={result.mape} decimals={1} suffix="%" />
+                              </td>
                             </tr>
                           </tbody>
                         </table>

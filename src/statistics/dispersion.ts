@@ -58,7 +58,7 @@ export function calculateDispersion(
   } else {
     // Relative to mean
     coefficientOfVariation = (populationStandardDeviation / Math.abs(mean)) * 100;
-    cvCalcStr = `(σ [${formatNumber(populationStandardDeviation)}] / |μ| [${formatNumber(Math.abs(mean))}]) × 100% = ${formatNumber(coefficientOfVariation)}%`;
+    cvCalcStr = `(σ [${formatNumber(populationStandardDeviation)}] / |μ| [${formatNumber(Math.abs(mean))}]) × 100% = ${coefficientOfVariation.toFixed(2)}%`;
 
     if (coefficientOfVariation < 5) {
       classification = 'EXTREMELY CONSISTENT';
@@ -189,7 +189,7 @@ function getDispersionInterpretation(
     case 'EXTREMELY HIGH VARIATION':
       return {
         interpretation: 'Extremely high variation indicates that observations fluctuate substantially relative to their average.',
-        businessSignal: `Pronounced volatility (${cv ? formatNumber(cv) : ''}% CV). Observations exhibit extreme spikes or intermittent surges.`,
+        businessSignal: `Pronounced volatility (${cv !== null ? cv.toFixed(2) : ''}% CV). Observations exhibit extreme spikes or intermittent surges.`,
         action: 'Business activity may require closer monitoring of demand consistency and the factors contributing to large fluctuations.',
       };
     default:

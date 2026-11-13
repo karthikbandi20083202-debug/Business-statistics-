@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { 
   Calculator, 
   ChevronDown, 
@@ -30,6 +30,8 @@ import {
 import { calculateIndexNumbers } from '../statistics/indexNumbers';
 import { validateIndexInputs, parseIndexDataset } from '../statistics/validation';
 import { formatNumber } from '../statistics/centralTendency';
+import { AnimatedNumber } from './AnimatedNumber';
+import { ScrollRevealText } from './ScrollRevealText';
 
 // Verified KOI & CO. Item-Price Sample Dataset (ΣP0 = 2826, ΣP1 = 3543)
 const VERIFIED_KOI_SAMPLE_ITEMS: IndexItemObservation[] = [
@@ -48,18 +50,40 @@ interface IndexNumbersModuleProps {
 }
 
 export function IndexNumbersModule({ onResultCalculated }: IndexNumbersModuleProps = {}) {
-  // Input dimensions & configuration
-  const [itemCount, setItemCount] = useState(8);
+  // Input dimensions & configuration (Option A: Sample Data vs Option B: Custom N Configuration)
+  const [dataSource, setDataSource] = useState<'custom' | 'sample'>('custom');
+  const [customItemCount, setCustomItemCount] = useState(8);
+  const [customNInput, setCustomNInput] = useState('8');
+  const [nError, setNError] = useState<string | null>(null);
   const [basePeriodName, setBasePeriodName] = useState('Base Period (P0)');
   const [currentPeriodName, setCurrentPeriodName] = useState('Current Period (P1)');
   const [showConfig, setShowConfig] = useState(false);
 
-  // Raw inputs for item name, base price P0, and current price P1
-  const [itemNames, setItemNames] = useState<string[]>(
+  // Separate raw inputs for Custom N and Sample Data
+  const [customItemNames, setCustomItemNames] = useState<string[]>(
     Array.from({ length: 8 }, (_, i) => `Item ${i + 1}`)
   );
-  const [basePrices, setBasePrices] = useState<string[]>(Array(8).fill(''));
-  const [currentPrices, setCurrentPrices] = useState<string[]>(Array(8).fill(''));
+  const [customBasePrices, setCustomBasePrices] = useState<string[]>(Array(8).fill(''));
+  const [customCurrentPrices, setCustomCurrentPrices] = useState<string[]>(Array(8).fill(''));
+
+  const [sampleItemNames, setSampleItemNames] = useState<string[]>(
+    VERIFIED_KOI_SAMPLE_ITEMS.map((item) => item.itemName)
+  );
+  const [sampleBasePrices, setSampleBasePrices] = useState<string[]>(
+    VERIFIED_KOI_SAMPLE_ITEMS.map((item) => item.basePrice.toString())
+  );
+  const [sampleCurrentPrices, setSampleCurrentPrices] = useState<string[]>(
+    VERIFIED_KOI_SAMPLE_ITEMS.map((item) => item.currentPrice.toString())
+  );
+
+  const itemCount = dataSource === 'sample' ? sampleItemNames.length : customItemCount;
+  const itemNames = dataSource === 'sample' ? sampleItemNames : customItemNames;
+  const basePrices = dataSource === 'sample' ? sampleBasePrices : customBasePrices;
+  const currentPrices = dataSource === 'sample' ? sampleCurrentPrices : customCurrentPrices;
+
+  useEffect(() => {
+    setCustomNInput(String(customItemCount));
+  }, [customItemCount]);
 
   // Validation & Result states
   const [validationState, setValidationState] = useState<IndexValidationState | null>(null);
@@ -70,9 +94,15 @@ export function IndexNumbersModule({ onResultCalculated }: IndexNumbersModulePro
 
   // Invalidate analysis when inputs change
   const handleNameChange = (idx: number, val: string) => {
-    const updated = [...itemNames];
-    updated[idx] = val;
-    setItemNames(updated);
+    if (dataSource === 'sample') {
+      const updated = [...sampleItemNames];
+      updated[idx] = val;
+      setSampleItemNames(updated);
+    } else {
+      const updated = [...customItemNames];
+      updated[idx] = val;
+      setCustomItemNames(updated);
+    }
 
     if (hasAnalyzed) {
       setHasAnalyzed(false);
@@ -85,9 +115,15 @@ export function IndexNumbersModule({ onResultCalculated }: IndexNumbersModulePro
   };
 
   const handleBasePriceChange = (idx: number, val: string) => {
-    const updated = [...basePrices];
-    updated[idx] = val;
-    setBasePrices(updated);
+    if (dataSource === 'sample') {
+      const updated = [...sampleBasePrices];
+      updated[idx] = val;
+      setSampleBasePrices(updated);
+    } else {
+      const updated = [...customBasePrices];
+      updated[idx] = val;
+      setCustomBasePrices(updated);
+    }
 
     if (hasAnalyzed) {
       setHasAnalyzed(false);
@@ -100,9 +136,15 @@ export function IndexNumbersModule({ onResultCalculated }: IndexNumbersModulePro
   };
 
   const handleCurrentPriceChange = (idx: number, val: string) => {
-    const updated = [...currentPrices];
-    updated[idx] = val;
-    setCurrentPrices(updated);
+    if (dataSource === 'sample') {
+      const updated = [...sampleCurrentPrices];
+      updated[idx] = val;
+      setSampleCurrentPrices(updated);
+    } else {
+      const updated = [...customCurrentPrices];
+      updated[idx] = val;
+      setCustomCurrentPrices(updated);
+    }
 
     if (hasAnalyzed) {
       setHasAnalyzed(false);
@@ -115,35 +157,59 @@ export function IndexNumbersModule({ onResultCalculated }: IndexNumbersModulePro
   };
 
   const handleItemCountChange = (newCount: number) => {
-    if (newCount < 2 || newCount > 30) return;
-    setItemCount(newCount);
+    if (!Number.isInteger(newCount) || newCount < 1) return;
+    setCustomItemCount(newCount);
 
-    const newNames = Array.from({ length: newCount }, (_, i) => 
-      itemNames[i] || `Item ${i + 1}`
+    const newNames = Array.from({ length: newCount }, (_, i) =>
+      customItemNames[i] !== undefined ? customItemNames[i] : `Item ${i + 1}`
     );
-    const newBase = Array.from({ length: newCount }, (_, i) => 
-      basePrices[i] || ''
+    const newBase = Array.from({ length: newCount }, (_, i) =>
+      customBasePrices[i] ?? ''
     );
-    const newCurr = Array.from({ length: newCount }, (_, i) => 
-      currentPrices[i] || ''
+    const newCurr = Array.from({ length: newCount }, (_, i) =>
+      customCurrentPrices[i] ?? ''
     );
 
-    setItemNames(newNames);
-    setBasePrices(newBase);
-    setCurrentPrices(newCurr);
+    setCustomItemNames(newNames);
+    setCustomBasePrices(newBase);
+    setCustomCurrentPrices(newCurr);
+    setDataSource('custom');
     setHasAnalyzed(false);
     setResult(null);
     onResultCalculated?.(null);
     setValidationState(null);
   };
 
+  const applyCustomN = () => {
+    const trimmed = customNInput.trim();
+    if (!/^\d+$/.test(trimmed)) {
+      setNError('Enter a valid positive integer n (n ≥ 1).');
+      return;
+    }
+    const parsed = parseInt(trimmed, 10);
+    if (!Number.isInteger(parsed) || parsed < 1) {
+      setNError('Item count n must be at least 1.');
+      return;
+    }
+    setNError(null);
+    handleItemCountChange(parsed);
+  };
+
   const handleLoadSample = () => {
-    setItemCount(VERIFIED_KOI_SAMPLE_ITEMS.length);
     setBasePeriodName('Base Period (P0)');
     setCurrentPeriodName('Current Period (P1)');
-    setItemNames(VERIFIED_KOI_SAMPLE_ITEMS.map((item) => item.itemName));
-    setBasePrices(VERIFIED_KOI_SAMPLE_ITEMS.map((item) => item.basePrice.toString()));
-    setCurrentPrices(VERIFIED_KOI_SAMPLE_ITEMS.map((item) => item.currentPrice.toString()));
+    setSampleItemNames(VERIFIED_KOI_SAMPLE_ITEMS.map((item) => item.itemName));
+    setSampleBasePrices(VERIFIED_KOI_SAMPLE_ITEMS.map((item) => item.basePrice.toString()));
+    setSampleCurrentPrices(VERIFIED_KOI_SAMPLE_ITEMS.map((item) => item.currentPrice.toString()));
+    setDataSource('sample');
+    setHasAnalyzed(false);
+    setResult(null);
+    onResultCalculated?.(null);
+    setValidationState(null);
+  };
+
+  const handleSwitchToCustom = () => {
+    setDataSource('custom');
     setHasAnalyzed(false);
     setResult(null);
     onResultCalculated?.(null);
@@ -151,9 +217,15 @@ export function IndexNumbersModule({ onResultCalculated }: IndexNumbersModulePro
   };
 
   const handleClear = () => {
-    setItemNames(Array.from({ length: itemCount }, (_, i) => `Item ${i + 1}`));
-    setBasePrices(Array(itemCount).fill(''));
-    setCurrentPrices(Array(itemCount).fill(''));
+    if (dataSource === 'sample') {
+      setSampleItemNames(Array.from({ length: sampleItemNames.length }, (_, i) => `Item ${i + 1}`));
+      setSampleBasePrices(Array(sampleBasePrices.length).fill(''));
+      setSampleCurrentPrices(Array(sampleCurrentPrices.length).fill(''));
+    } else {
+      setCustomItemNames(Array.from({ length: customItemCount }, (_, i) => `Item ${i + 1}`));
+      setCustomBasePrices(Array(customItemCount).fill(''));
+      setCustomCurrentPrices(Array(customItemCount).fill(''));
+    }
     setHasAnalyzed(false);
     setResult(null);
     onResultCalculated?.(null);
@@ -295,15 +367,30 @@ export function IndexNumbersModule({ onResultCalculated }: IndexNumbersModulePro
 
           {/* Action & Configuration Controls */}
           <div className="flex flex-wrap items-center justify-between gap-3 pb-2 border-b border-slate-800/60">
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               <button
                 type="button"
                 onClick={handleLoadSample}
-                className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded bg-purple-500/10 hover:bg-purple-500/20 text-purple-300 text-xs font-mono transition-colors cursor-pointer border border-purple-500/30"
+                className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded text-xs font-mono transition-colors cursor-pointer border ${
+                  dataSource === 'sample'
+                    ? 'bg-purple-500/25 text-purple-200 border-purple-400/60'
+                    : 'bg-purple-500/10 hover:bg-purple-500/20 text-purple-300 border-purple-500/30'
+                }`}
               >
                 <Sparkles className="w-3 h-3 text-purple-400" />
                 <span>LOAD SAMPLE VALUES</span>
               </button>
+
+              {dataSource === 'sample' && (
+                <button
+                  type="button"
+                  onClick={handleSwitchToCustom}
+                  className="inline-flex items-center gap-1 px-2.5 py-1 rounded bg-slate-900 hover:bg-slate-800 text-slate-300 hover:text-white text-xs font-mono transition-colors cursor-pointer border border-slate-700"
+                  title="Switch back to your independent Custom N items"
+                >
+                  <span>CUSTOM N ({customItemCount})</span>
+                </button>
+              )}
 
               <button
                 type="button"
@@ -366,21 +453,56 @@ export function IndexNumbersModule({ onResultCalculated }: IndexNumbersModulePro
                     Number of Items (n)
                   </label>
                   <div className="flex items-center gap-2">
-                    {[4, 6, 8, 10, 12].map((cnt) => (
-                      <button
-                        key={cnt}
-                        type="button"
-                        onClick={() => handleItemCountChange(cnt)}
-                        className={`px-2 py-1 rounded font-mono text-xs cursor-pointer ${
-                          itemCount === cnt
-                            ? 'bg-purple-500/20 text-purple-300 border border-purple-500/50'
-                            : 'bg-slate-900 text-slate-400 border border-slate-800 hover:text-white'
-                        }`}
-                      >
-                        n = {cnt}
-                      </button>
-                    ))}
+                    <input
+                      type="text"
+                      inputMode="numeric"
+                      value={customNInput}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        if (/^\d*$/.test(val)) {
+                          setCustomNInput(val);
+                          if (nError) setNError(null);
+                        }
+                      }}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          e.preventDefault();
+                          applyCustomN();
+                        }
+                      }}
+                      onBlur={() => {
+                        const trimmed = customNInput.trim();
+                        const parsed = parseInt(trimmed, 10);
+                        if (/^\d+$/.test(trimmed) && parsed >= 1) {
+                          if (parsed !== customItemCount) {
+                            handleItemCountChange(parsed);
+                          }
+                          setNError(null);
+                        } else {
+                          setCustomNInput(String(customItemCount));
+                          setNError(null);
+                        }
+                      }}
+                      placeholder="Enter n (e.g. 25)"
+                      aria-label="Custom Number of Items n"
+                      className="w-28 px-2.5 py-1.5 rounded bg-slate-900 border border-slate-700 text-white font-mono text-xs focus:outline-none focus:border-purple-500"
+                    />
+                    <button
+                      type="button"
+                      onMouseDown={(e) => e.preventDefault()}
+                      onClick={applyCustomN}
+                      className="px-2.5 py-1.5 rounded font-mono text-xs font-semibold bg-purple-500/20 text-purple-300 border border-purple-500/50 hover:bg-purple-500/30 transition-colors cursor-pointer"
+                    >
+                      Apply n
+                    </button>
                   </div>
+                  {nError ? (
+                    <p className="text-[10px] text-rose-400 font-mono mt-1">{nError}</p>
+                  ) : (
+                    <p className="text-[10px] text-slate-500 font-mono mt-1">
+                      Any integer n ≥ 1 (e.g. 5, 12, 25, 50, 100)
+                    </p>
+                  )}
                 </div>
               </div>
             </div>
@@ -541,10 +663,10 @@ export function IndexNumbersModule({ onResultCalculated }: IndexNumbersModulePro
                     BASE PERIOD TOTAL (ΣP₀)
                   </span>
                   <p className="font-mono text-2xl font-bold text-slate-200">
-                    ₹{formatNumber(result.basePeriodTotal)}
+                    ₹<AnimatedNumber value={result.basePeriodTotal} decimals={Math.abs(result.basePeriodTotal - Math.round(result.basePeriodTotal)) < 1e-7 ? 0 : 2} />
                   </p>
                   <p className="text-[11px] font-mono text-slate-500 mt-1">
-                    Aggregate across {result.n} selected items
+                    Aggregate across <AnimatedNumber value={result.n} decimals={0} /> selected items
                   </p>
                 </div>
 
@@ -554,10 +676,10 @@ export function IndexNumbersModule({ onResultCalculated }: IndexNumbersModulePro
                     CURRENT PERIOD TOTAL (ΣP₁)
                   </span>
                   <p className="font-mono text-2xl font-bold text-emerald-400">
-                    ₹{formatNumber(result.currentPeriodTotal)}
+                    ₹<AnimatedNumber value={result.currentPeriodTotal} decimals={Math.abs(result.currentPeriodTotal - Math.round(result.currentPeriodTotal)) < 1e-7 ? 0 : 2} />
                   </p>
                   <p className="text-[11px] font-mono text-slate-500 mt-1">
-                    Aggregate across {result.n} selected items
+                    Aggregate across <AnimatedNumber value={result.n} decimals={0} /> selected items
                   </p>
                 </div>
 
@@ -568,7 +690,7 @@ export function IndexNumbersModule({ onResultCalculated }: IndexNumbersModulePro
                     PRICE INDEX (P₀₁)
                   </span>
                   <p className="font-mono text-3xl font-extrabold text-white">
-                    {formatNumber(result.priceIndex, 2)}
+                    <AnimatedNumber value={result.priceIndex} decimals={2} />
                   </p>
                   <div className="mt-1">
                     {renderClassificationBadge(result.classification)}
@@ -587,8 +709,12 @@ export function IndexNumbersModule({ onResultCalculated }: IndexNumbersModulePro
                       ? 'text-teal-400'
                       : 'text-indigo-300'
                   }`}>
-                    {result.percentageChange > 0 ? '+' : result.percentageChange < 0 ? '−' : ''}
-                    {formatNumber(Math.abs(result.percentageChange), 2)}%
+                    <AnimatedNumber
+                      value={Math.abs(result.percentageChange)}
+                      decimals={2}
+                      prefix={result.percentageChange > 0 ? '+' : result.percentageChange < 0 ? '−' : ''}
+                      suffix="%"
+                    />
                   </p>
                   <p className="text-[11px] font-mono text-slate-500 mt-1">
                     Relative to Base Period (100.00)
@@ -610,7 +736,7 @@ export function IndexNumbersModule({ onResultCalculated }: IndexNumbersModulePro
                   {/* Statistical Interpretation */}
                   <p className="text-slate-200">
                     <strong className="text-purple-300">Statistical Finding: </strong>
-                    {result.interpretation}
+                    <ScrollRevealText as="span" text={result.interpretation} className="inline text-slate-200" />
                   </p>
 
                   {/* Business Implication */}
@@ -620,7 +746,7 @@ export function IndexNumbersModule({ onResultCalculated }: IndexNumbersModulePro
                       <span className="font-mono text-xs text-purple-300 font-semibold block mb-0.5">
                         BUSINESS IMPLICATION
                       </span>
-                      <p className="text-slate-300 text-xs">{result.businessImplication}</p>
+                      <ScrollRevealText as="p" text={result.businessImplication} className="text-slate-300 text-xs" />
                     </div>
                   </div>
 
@@ -631,7 +757,7 @@ export function IndexNumbersModule({ onResultCalculated }: IndexNumbersModulePro
                       <span className="font-mono text-xs text-emerald-400 font-semibold block mb-0.5">
                         ACTIONABLE BUSINESS SIGNAL
                       </span>
-                      <p className="text-slate-300 text-xs">{result.businessSignal}</p>
+                      <ScrollRevealText as="p" text={result.businessSignal} className="text-slate-300 text-xs" />
                     </div>
                   </div>
                 </div>
@@ -710,27 +836,48 @@ export function IndexNumbersModule({ onResultCalculated }: IndexNumbersModulePro
                               <tr key={idx} className="hover:bg-slate-900/50">
                                 <td className="p-2 text-center text-slate-500">{idx + 1}</td>
                                 <td className="p-2 text-slate-200 font-medium">{it.itemName}</td>
-                                <td className="p-2 text-right text-slate-300">₹{formatNumber(it.p0)}</td>
-                                <td className="p-2 text-right text-emerald-400">₹{formatNumber(it.p1)}</td>
                                 <td className="p-2 text-right text-slate-300">
-                                  {it.itemDiff >= 0 ? '+' : ''}₹{formatNumber(it.itemDiff)}
+                                  ₹<AnimatedNumber value={it.p0} decimals={Math.abs(it.p0 - Math.round(it.p0)) < 1e-7 ? 0 : 2} />
+                                </td>
+                                <td className="p-2 text-right text-emerald-400">
+                                  ₹<AnimatedNumber value={it.p1} decimals={Math.abs(it.p1 - Math.round(it.p1)) < 1e-7 ? 0 : 2} />
+                                </td>
+                                <td className="p-2 text-right text-slate-300">
+                                  <AnimatedNumber
+                                    value={Math.abs(it.itemDiff)}
+                                    decimals={Math.abs(it.itemDiff - Math.round(it.itemDiff)) < 1e-7 ? 0 : 2}
+                                    prefix={it.itemDiff >= 0 ? '+₹' : '−₹'}
+                                  />
                                 </td>
                                 <td className="p-2 text-right text-slate-400">
-                                  {it.itemDiffPercent >= 0 ? '+' : ''}{formatNumber(it.itemDiffPercent, 1)}%
+                                  <AnimatedNumber
+                                    value={it.itemDiffPercent}
+                                    decimals={1}
+                                    prefix={it.itemDiffPercent >= 0 ? '+' : ''}
+                                    suffix="%"
+                                  />
                                 </td>
                               </tr>
                             ))}
                             {/* Totals Row */}
                             <tr className="bg-slate-900/90 font-bold border-t-2 border-slate-700 text-slate-200">
                               <td className="p-2 text-center text-purple-400">Σ</td>
-                              <td className="p-2 text-purple-400">Totals (n = {result.n} items)</td>
-                              <td className="p-2 text-right text-slate-100">₹{formatNumber(result.basePeriodTotal)}</td>
-                              <td className="p-2 text-right text-emerald-400">₹{formatNumber(result.currentPeriodTotal)}</td>
+                              <td className="p-2 text-purple-400">Totals (n = <AnimatedNumber value={result.n} decimals={0} /> items)</td>
+                              <td className="p-2 text-right text-slate-100">
+                                ₹<AnimatedNumber value={result.basePeriodTotal} decimals={Math.abs(result.basePeriodTotal - Math.round(result.basePeriodTotal)) < 1e-7 ? 0 : 2} />
+                              </td>
+                              <td className="p-2 text-right text-emerald-400">
+                                ₹<AnimatedNumber value={result.currentPeriodTotal} decimals={Math.abs(result.currentPeriodTotal - Math.round(result.currentPeriodTotal)) < 1e-7 ? 0 : 2} />
+                              </td>
                               <td className="p-2 text-right text-slate-200">
-                                +₹{formatNumber(result.currentPeriodTotal - result.basePeriodTotal)}
+                                <AnimatedNumber
+                                  value={Math.abs(result.currentPeriodTotal - result.basePeriodTotal)}
+                                  decimals={Math.abs((result.currentPeriodTotal - result.basePeriodTotal) - Math.round(result.currentPeriodTotal - result.basePeriodTotal)) < 1e-7 ? 0 : 2}
+                                  prefix={result.currentPeriodTotal - result.basePeriodTotal >= 0 ? '+₹' : '−₹'}
+                                />
                               </td>
                               <td className="p-2 text-right text-purple-300">
-                                Index = {formatNumber(result.priceIndex, 2)}
+                                Index = <AnimatedNumber value={result.priceIndex} decimals={2} />
                               </td>
                             </tr>
                           </tbody>

@@ -87,7 +87,7 @@ export function calculateCentralTendency(data: number[]): CentralTendencyResult 
     classification = 'NOT APPLICABLE';
   } else {
     diffPercent = (Math.abs(mean - median) / Math.abs(median)) * 100;
-    diffCalcStr = `|${formatNumber(mean)} - ${formatNumber(median)}| / |${formatNumber(median)}| × 100% = ${formatNumber(diffPercent)}%`;
+    diffCalcStr = `|${formatNumber(mean)} - ${formatNumber(median)}| / |${formatNumber(median)}| × 100% = ${diffPercent.toFixed(2)}%`;
 
     if (diffPercent < 2) {
       classification = 'VERY CLOSE';
@@ -153,7 +153,7 @@ function getCentralInterpretation(
     case 'MODERATE DIFFERENCE':
       return {
         interpretation: 'Mean and median exhibit a moderate difference, indicating moderate skewness or variation in business activity.',
-        businessSignal: `Noticeable divergence (${diffPercent ? formatNumber(diffPercent) : ''}%). ${mean > median ? 'Upper-tier outlier events are lifting the mean above typical volume.' : 'Slower periods are pulling the mean below mid-point volume.'}`,
+        businessSignal: `Noticeable divergence (${diffPercent !== null ? diffPercent.toFixed(2) : ''}%). ${mean > median ? 'Upper-tier outlier events are lifting the mean above typical volume.' : 'Slower periods are pulling the mean below mid-point volume.'}`,
         action: 'Cross-reference operational capacity using the median as the typical customer day baseline.',
       };
     case 'SUBSTANTIAL DIFFERENCE':

@@ -15,10 +15,25 @@ import {
 } from 'lucide-react';
 import { DispersionResult } from '../types/statistics';
 import { formatNumber } from '../statistics/centralTendency';
+import { AnimatedNumber } from './AnimatedNumber';
+import { ScrollRevealText } from './ScrollRevealText';
 
 interface DispersionModuleProps {
   result: DispersionResult | null;
   variableName: string;
+}
+
+/**
+ * Determines sensible decimal display precision:
+ * - Whole numbers (counts, whole observations, integers) -> 0 decimals (clean whole numbers)
+ * - Single-decimal fractions (e.g., .5) -> 1 decimal
+ * - General statistics (means, variance, std dev) -> up to maxDecimals (default 2)
+ */
+function getSensibleDecimals(val: number | null | undefined, maxDecimals = 2): number {
+  if (val === null || val === undefined || !isFinite(val)) return 0;
+  if (Math.abs(val - Math.round(val)) < 1e-7) return 0;
+  if (Math.abs(val * 10 - Math.round(val * 10)) < 1e-7) return 1;
+  return maxDecimals;
 }
 
 export function DispersionModule({ result, variableName }: DispersionModuleProps) {
@@ -83,7 +98,7 @@ export function DispersionModule({ result, variableName }: DispersionModuleProps
                 Range (Max − Min)
               </span>
               <span className="font-mono text-xl sm:text-2xl font-bold text-slate-100">
-                {formatNumber(result.range)}
+                <AnimatedNumber value={result.range} decimals={getSensibleDecimals(result.range, 2)} />
               </span>
               <span className="text-[11px] text-slate-500 block mt-1">
                 Total spread
@@ -96,7 +111,7 @@ export function DispersionModule({ result, variableName }: DispersionModuleProps
                 Quartile Deviation
               </span>
               <span className="font-mono text-xl sm:text-2xl font-bold text-slate-100">
-                {formatNumber(result.quartileDeviation)}
+                <AnimatedNumber value={result.quartileDeviation} decimals={getSensibleDecimals(result.quartileDeviation, 2)} />
               </span>
               <span className="text-[11px] text-slate-500 block mt-1">
                 (Q3 − Q1) / 2
@@ -109,7 +124,7 @@ export function DispersionModule({ result, variableName }: DispersionModuleProps
                 Population Variance (σ²)
               </span>
               <span className="font-mono text-lg sm:text-xl font-bold text-slate-100 truncate block">
-                {formatNumber(result.populationVariance)}
+                <AnimatedNumber value={result.populationVariance} decimals={getSensibleDecimals(result.populationVariance, 2)} />
               </span>
               <span className="text-[11px] text-slate-500 block mt-1">
                 Σ(X − μ)² / N
@@ -122,7 +137,7 @@ export function DispersionModule({ result, variableName }: DispersionModuleProps
                 Standard Deviation (σ)
               </span>
               <span className="font-mono text-xl sm:text-2xl font-bold text-emerald-400">
-                {formatNumber(result.populationStandardDeviation)}
+                <AnimatedNumber value={result.populationStandardDeviation} decimals={getSensibleDecimals(result.populationStandardDeviation, 2)} />
               </span>
               <span className="text-[11px] text-slate-500 block mt-1">
                 Absolute spread
@@ -135,9 +150,11 @@ export function DispersionModule({ result, variableName }: DispersionModuleProps
                 Coeff. of Variation (CV)
               </span>
               <span className="font-mono text-xl sm:text-2xl font-bold text-teal-300">
-                {result.coefficientOfVariation !== null
-                  ? `${formatNumber(result.coefficientOfVariation)}%`
-                  : 'N/A'}
+                {result.coefficientOfVariation !== null ? (
+                  <AnimatedNumber value={result.coefficientOfVariation} decimals={2} suffix="%" />
+                ) : (
+                  'N/A'
+                )}
               </span>
               <span className="text-[11px] text-slate-500 block mt-1">
                 (σ / μ) × 100
@@ -150,15 +167,15 @@ export function DispersionModule({ result, variableName }: DispersionModuleProps
           <div className="p-3 rounded-lg bg-slate-950/60 border border-slate-800/80 grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs font-mono">
             <div>
               <span className="text-slate-500 block">First Quartile (Q1 - 25%):</span>
-              <span className="text-slate-200 font-semibold">{formatNumber(result.q1)}</span>
+              <span className="text-slate-200 font-semibold"><AnimatedNumber value={result.q1} decimals={getSensibleDecimals(result.q1, 2)} /></span>
             </div>
             <div>
               <span className="text-slate-500 block">Third Quartile (Q3 - 75%):</span>
-              <span className="text-slate-200 font-semibold">{formatNumber(result.q3)}</span>
+              <span className="text-slate-200 font-semibold"><AnimatedNumber value={result.q3} decimals={getSensibleDecimals(result.q3, 2)} /></span>
             </div>
             <div>
               <span className="text-slate-500 block">Interquartile Range (IQR):</span>
-              <span className="text-slate-200 font-semibold">{formatNumber(result.q3 - result.q1)}</span>
+              <span className="text-slate-200 font-semibold"><AnimatedNumber value={result.q3 - result.q1} decimals={getSensibleDecimals(result.q3 - result.q1, 2)} /></span>
             </div>
             <div>
               <span className="text-slate-500 block">Relative Volatility Index:</span>
@@ -176,23 +193,17 @@ export function DispersionModule({ result, variableName }: DispersionModuleProps
             <div className="space-y-3 text-xs sm:text-sm">
               <div>
                 <span className="font-mono text-xs text-slate-400 block mb-0.5">1. STATISTICAL INTERPRETATION:</span>
-                <p className="text-slate-200 leading-relaxed font-normal">
-                  {result.interpretation}
-                </p>
+                <ScrollRevealText as="p" text={result.interpretation} className="text-slate-200 leading-relaxed font-normal" />
               </div>
 
               <div>
                 <span className="font-mono text-xs text-slate-400 block mb-0.5">2. BUSINESS SIGNAL ({variableName}):</span>
-                <p className="text-slate-300 leading-relaxed">
-                  {result.businessSignal}
-                </p>
+                <ScrollRevealText as="p" text={result.businessSignal} className="text-slate-300 leading-relaxed" />
               </div>
 
               <div>
                 <span className="font-mono text-xs text-emerald-400/90 block mb-0.5">3. ACTIONABLE IMPLICATION:</span>
-                <p className="text-emerald-200 leading-relaxed">
-                  {result.action}
-                </p>
+                <ScrollRevealText as="p" text={result.action} className="text-emerald-200 leading-relaxed" />
               </div>
             </div>
           </div>

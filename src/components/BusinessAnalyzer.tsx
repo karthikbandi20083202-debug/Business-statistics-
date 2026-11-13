@@ -30,7 +30,15 @@ import {
   DiagnosisEvidenceState
 } from '../types/statistics';
 import { validateDatasetInputs, parseDataset } from '../statistics/validation';
-import { calculateCentralTendency, formatNumber } from '../statistics/centralTendency';
+import { calculateCentralTendency } from '../statistics/centralTendency';
+import { AnimatedNumber } from './AnimatedNumber';
+
+function getSensibleDecimals(val: number | null | undefined, maxDecimals = 2): number {
+  if (val === null || val === undefined || !isFinite(val)) return 0;
+  if (Math.abs(val - Math.round(val)) < 1e-7) return 0;
+  if (Math.abs(val * 10 - Math.round(val * 10)) < 1e-7) return 1;
+  return maxDecimals;
+}
 import { calculateDispersion } from '../statistics/dispersion';
 import { calculateCorrelation } from '../statistics/correlation';
 import { calculateRegression } from '../statistics/regression';
@@ -99,21 +107,29 @@ export function BusinessAnalyzer({ onBackToLanding }: BusinessAnalyzerProps) {
 
   // ==========================================
   // Univariate State (Central Tendency & Dispersion)
+  // Independent Option A (Sample Data) vs Option B (Custom N Configuration)
   // ==========================================
   const [variableName, setVariableName] = useState('Customer Footfall');
-  const [observationCount, setObservationCount] = useState(15);
-  const [rawInputs, setRawInputs] = useState<string[]>(Array(15).fill(''));
+  const [dataSource, setDataSource] = useState<'custom' | 'sample'>('custom');
+  const [customCount, setCustomCount] = useState(15);
+  const [customInputs, setCustomInputs] = useState<string[]>(Array(15).fill(''));
+  const [sampleInputs, setSampleInputs] = useState<string[]>(
+    VERIFIED_FOOTFALL_15.map((n) => n.toString())
+  );
   const [validationState, setValidationState] = useState<ValidationState | null>(null);
   const [results, setResults] = useState<AnalysisResults | null>(null);
   const [hasAnalyzed, setHasAnalyzed] = useState(false);
 
-  // Synthesize all 6 verified datasets in one click
+  const observationCount = dataSource === 'sample' ? sampleInputs.length : customCount;
+  const rawInputs = dataSource === 'sample' ? sampleInputs : customInputs;
+
+  // Synthesize all 6 verified datasets in one click (Option A: Sample Data - leaves Custom N untouched)
   const handleSynthesizeAllData = () => {
-    // 1. Univariate
+    // 1. Univariate (Sample Data)
     const uParsed = [...VERIFIED_FOOTFALL_15];
     const uInputs = uParsed.map((n) => n.toString());
-    setRawInputs(uInputs);
-    setObservationCount(uParsed.length);
+    setSampleInputs(uInputs);
+    setDataSource('sample');
     setVariableName('Customer Footfall');
     const ctRes = calculateCentralTendency(uParsed);
     const dispRes = calculateDispersion(uParsed, ctRes.mean);
@@ -155,9 +171,15 @@ export function BusinessAnalyzer({ onBackToLanding }: BusinessAnalyzerProps) {
 
   // Univariate Input Handlers
   const handleInputChange = (index: number, value: string) => {
-    const updated = [...rawInputs];
-    updated[index] = value;
-    setRawInputs(updated);
+    if (dataSource === 'sample') {
+      const updated = [...sampleInputs];
+      updated[index] = value;
+      setSampleInputs(updated);
+    } else {
+      const updated = [...customInputs];
+      updated[index] = value;
+      setCustomInputs(updated);
+    }
     if (hasAnalyzed) {
       setHasAnalyzed(false);
       setResults(null);
@@ -167,8 +189,38 @@ export function BusinessAnalyzer({ onBackToLanding }: BusinessAnalyzerProps) {
     }
   };
 
-  const handleBulkSetInputs = (inputs: string[]) => {
-    setRawInputs(inputs);
+  const handleLoadSample = () => {
+    setSampleInputs(VERIFIED_FOOTFALL_15.map((n) => n.toString()));
+    setDataSource('sample');
+    setHasAnalyzed(false);
+    setResults(null);
+    setValidationState(null);
+  };
+
+  const handleSwitchToCustom = () => {
+    setDataSource('custom');
+    setHasAnalyzed(false);
+    setResults(null);
+    setValidationState(null);
+  };
+
+  const handleCustomCountChange = (newCount: number) => {
+    if (!Number.isInteger(newCount) || newCount < 1) return;
+    const nextCustom = Array.from({ length: newCount }, (_, i) => customInputs[i] ?? '');
+    setCustomCount(newCount);
+    setCustomInputs(nextCustom);
+    setDataSource('custom');
+    setHasAnalyzed(false);
+    setResults(null);
+    setValidationState(null);
+  };
+
+  const handleClear = () => {
+    if (dataSource === 'sample') {
+      setSampleInputs(Array(sampleInputs.length).fill(''));
+    } else {
+      setCustomInputs(Array(customCount).fill(''));
+    }
     setHasAnalyzed(false);
     setResults(null);
     setValidationState(null);
@@ -202,7 +254,10 @@ export function BusinessAnalyzer({ onBackToLanding }: BusinessAnalyzerProps) {
   };
 
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 py-8 sm:py-12 space-y-8">
+    <div
+      data-business-analyzer="true"
+      className="business-analyzer-container max-w-7xl mx-auto px-4 sm:px-6 py-8 sm:py-12 space-y-8"
+    >
       
       {/* Top Breadcrumb & Page Title Header */}
       <div className="space-y-4 pb-6 border-b border-slate-800/80">
@@ -240,10 +295,14 @@ export function BusinessAnalyzer({ onBackToLanding }: BusinessAnalyzerProps) {
         variableName={variableName}
         onVariableNameChange={setVariableName}
         observationCount={observationCount}
-        onObservationCountChange={setObservationCount}
+        dataSource={dataSource}
+        customCount={customCount}
+        onCustomCountChange={handleCustomCountChange}
+        onLoadSample={handleLoadSample}
+        onSwitchToCustom={handleSwitchToCustom}
+        onClear={handleClear}
         rawInputs={rawInputs}
         onInputChange={handleInputChange}
-        onBulkSetInputs={handleBulkSetInputs}
         onAnalyze={handleAnalyze}
         validationState={validationState}
         hasAnalyzed={hasAnalyzed}
@@ -260,7 +319,7 @@ export function BusinessAnalyzer({ onBackToLanding }: BusinessAnalyzerProps) {
               </h3>
             </div>
             <span className="font-mono text-xs text-slate-400">
-              Evaluated at {results.timestamp} · N = {results.dataset.length}
+              Evaluated at {results.timestamp} · N = <AnimatedNumber value={results.dataset.length} decimals={0} />
             </span>
           </div>
 
@@ -268,27 +327,29 @@ export function BusinessAnalyzer({ onBackToLanding }: BusinessAnalyzerProps) {
             <div className="p-2.5 rounded bg-slate-950/60 border border-slate-800">
               <span className="text-slate-500 block">Baseline Mean:</span>
               <span className="text-emerald-400 font-bold text-sm">
-                {formatNumber(results.centralTendency.mean)}
+                <AnimatedNumber value={results.centralTendency.mean} decimals={getSensibleDecimals(results.centralTendency.mean, 2)} />
               </span>
             </div>
             <div className="p-2.5 rounded bg-slate-950/60 border border-slate-800">
               <span className="text-slate-500 block">Median Midpoint:</span>
               <span className="text-slate-200 font-bold text-sm">
-                {formatNumber(results.centralTendency.median)}
+                <AnimatedNumber value={results.centralTendency.median} decimals={getSensibleDecimals(results.centralTendency.median, 2)} />
               </span>
             </div>
             <div className="p-2.5 rounded bg-slate-950/60 border border-slate-800">
               <span className="text-slate-500 block">Std Deviation (σ):</span>
               <span className="text-slate-200 font-bold text-sm">
-                {formatNumber(results.dispersion.populationStandardDeviation)}
+                <AnimatedNumber value={results.dispersion.populationStandardDeviation} decimals={getSensibleDecimals(results.dispersion.populationStandardDeviation, 2)} />
               </span>
             </div>
             <div className="p-2.5 rounded bg-slate-950/60 border border-slate-800">
               <span className="text-slate-500 block">Coeff. of Variation (CV):</span>
               <span className="text-teal-300 font-bold text-sm">
-                {results.dispersion.coefficientOfVariation !== null
-                  ? `${formatNumber(results.dispersion.coefficientOfVariation)}%`
-                  : 'N/A'}
+                {results.dispersion.coefficientOfVariation !== null ? (
+                  <AnimatedNumber value={results.dispersion.coefficientOfVariation} decimals={2} suffix="%" />
+                ) : (
+                  'N/A'
+                )}
               </span>
             </div>
           </div>
@@ -299,7 +360,7 @@ export function BusinessAnalyzer({ onBackToLanding }: BusinessAnalyzerProps) {
             <span className="text-slate-100 font-medium lowercase">
               {results.centralTendency.classification}
             </span>{' '}
-            between mean ({formatNumber(results.centralTendency.mean)}) and median ({formatNumber(results.centralTendency.median)}), paired with{' '}
+            between mean (<AnimatedNumber value={results.centralTendency.mean} decimals={getSensibleDecimals(results.centralTendency.mean, 2)} />) and median (<AnimatedNumber value={results.centralTendency.median} decimals={getSensibleDecimals(results.centralTendency.median, 2)} />), paired with{' '}
             <span className="text-slate-100 font-medium lowercase">
               {results.dispersion.classification}
             </span>{' '}
